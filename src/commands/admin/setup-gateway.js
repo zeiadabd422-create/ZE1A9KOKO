@@ -1,12 +1,14 @@
 import { SlashCommandBuilder } from 'discord.js';
 import gatewayManager from '../../modules/gateway/gatewayManager.js';
-import { updateGuildConfig, getGuildConfig } from '../../core/database.js';
+import gatewayModule from '../../modules/gateway/index.js';
 import { logger } from '../../core/logger.js';
 
 /**
  * Setup Gateway Slash Command
- * Handles interaction and database updates only
- * Delegates gateway message deployment to gatewayManager
+ * DDD: Presentation Layer - Command Handler
+ * 
+ * Collects user input and delegates to gateway module
+ * Validates configuration before saving to DB and cache
  * 
  * Subcommands:
  * - button: Deploy a button-based gateway
@@ -28,6 +30,7 @@ export default {
             .addStringOption(o => o.setName('embed_text').setDescription('Embed text/description').setRequired(false))
             .addStringOption(o => o.setName('button_label').setDescription('Label for the button').setRequired(false))
             .addStringOption(o => o.setName('button_style').setDescription('Button style (Primary/Secondary/Success/Danger)').setRequired(false))
+            .addChannelOption(o => o.setName('log_channel').setDescription('Channel to log verifications').setRequired(false))
         )
 
         .addSubcommand(sc => sc
@@ -37,6 +40,7 @@ export default {
             .addChannelOption(o => o.setName('channel').setDescription('Channel to send the gateway message').setRequired(true))
             .addStringOption(o => o.setName('embed_text').setDescription('Embed text/description').setRequired(false))
             .addStringOption(o => o.setName('emoji').setDescription('Emoji to react with (unicode or <:name:id>)').setRequired(false))
+            .addChannelOption(o => o.setName('log_channel').setDescription('Channel to log verifications').setRequired(false))
         )
 
         .addSubcommand(sc => sc
@@ -46,6 +50,7 @@ export default {
             .addChannelOption(o => o.setName('channel').setDescription('Channel to send the gateway message').setRequired(true))
             .addStringOption(o => o.setName('trigger_word').setDescription('Trigger word users must type').setRequired(true))
             .addStringOption(o => o.setName('instruction_text').setDescription('Instruction text to show in the embed').setRequired(false))
+            .addChannelOption(o => o.setName('log_channel').setDescription('Channel to log verifications').setRequired(false))
         )
 
         .addSubcommand(sc => sc
@@ -54,13 +59,14 @@ export default {
             .addRoleOption(o => o.setName('role').setDescription('Role to grant on verification').setRequired(true))
             .addChannelOption(o => o.setName('channel').setDescription('Channel to send the gateway message').setRequired(true))
             .addStringOption(o => o.setName('instruction_text').setDescription('Instruction text to show in the embed').setRequired(false))
+            .addChannelOption(o => o.setName('log_channel').setDescription('Channel to log verifications').setRequired(false))
         ),
 
     async execute(interaction) {
         // Validate guild context
         if (!interaction.inGuild() || !interaction.guild) {
             return interaction.reply({
-                content: 'This command must be used in a server.',
+                content: '❌ This command must be used in a server.',
                 ephemeral: true
             });
         }
@@ -72,11 +78,12 @@ export default {
             const guildId = interaction.guildId;
             const role = interaction.options.getRole('role');
             const channel = interaction.options.getChannel('channel');
+            const logChannel = interaction.options.getChannel('log_channel') || null;
 
             // Validate channel
             if (!channel || !channel.send) {
                 return interaction.editReply({
-                    content: 'Please provide a valid text channel.',
+                    content: '❌ Please provide a valid text channel.',
                     ephemeral: true
                 });
             }
@@ -84,97 +91,121 @@ export default {
             // Validate role
             if (!role) {
                 return interaction.editReply({
-                    content: 'Please provide a valid role.',
+                    content: '❌ Please provide a valid role.',
                     ephemeral: true
                 });
             }
 
-            let typeKey = '';
-            let settings = {};
+            let mode = '';
+            let configData = {
+                guildId,
+                enabled: true,
+                roleId: role.id,
+                channelId: channel.id,
+                logChannelId: logChannel?.id || null,
+                embedData: {
+                    title: 'Gate Verification',
+                    description: 'Please verify to access this server.',
+                    color: '5865F2',
+                    footer: 'Guardian Bot v4.0'
+                }
+            };
 
             // Collect settings based on subcommand
             switch (subcommand) {
                 case 'button': {
-                    typeKey = 'BUTTON';
-                    settings = {
-                        roleId: role.id,
-                        channelId: channel.id,
-                        embedText: interaction.options.getString('embed_text') || null,
-                        buttonLabel: interaction.options.getString('button_label') || 'Verify',
-                        buttonStyle: interaction.options.getString('button_style') || 'Primary'
+                    mode = 'BUTTON';
+                    const buttonLabel = interaction.options.getString('button_label') || 'Verify';
+                    const buttonStyle = interaction.options.getString('button_style') || 'Primary';
+                    const embedText = interaction.options.getString('embed_text');
+
+                    configData.mode = mode;
+                    configData.buttonConfig = {
+                        label: buttonLabel,
+                        style: buttonStyle
                     };
+                    if (embedText) {
+                        configData.embedData.description = embedText;
+                    }
                     break;
                 }
                 case 'reaction': {
-                    typeKey = 'REACTION';
-                    settings = {
-                        roleId: role.id,
-                        channelId: channel.id,
-                        embedText: interaction.options.getString('embed_text') || null,
-                        emoji: interaction.options.getString('emoji') || '✅'
-                    };
+                    mode = 'REACTION';
+                    const emoji = interaction.options.getString('emoji') || '✅';
+                    const embedText = interaction.options.getString('embed_text');
+
+                    configData.mode = mode;
+                    configData.reactionConfig = { emoji };
+                    if (embedText) {
+                        configData.embedData.description = embedText;
+                    }
                     break;
                 }
                 case 'trigger': {
-                    typeKey = 'TRIGGER';
-                    settings = {
-                        roleId: role.id,
-                        channelId: channel.id,
-                        triggerWord: interaction.options.getString('trigger_word') || 'verify',
-                        instructionText: interaction.options.getString('instruction_text') || null
+                    mode = 'TRIGGER';
+                    const triggerWord = interaction.options.getString('trigger_word') || 'verify';
+                    const instructionText = interaction.options.getString('instruction_text');
+
+                    configData.mode = mode;
+                    configData.triggerConfig = {
+                        triggerWord,
+                        instructionText: instructionText || `Type **${triggerWord}** to verify.`
                     };
+                    if (instructionText) {
+                        configData.embedData.description = instructionText;
+                    }
                     break;
                 }
                 case 'slash': {
-                    typeKey = 'SLASH';
-                    settings = {
-                        roleId: role.id,
-                        channelId: channel.id,
-                        instructionText: interaction.options.getString('instruction_text') || 'Please use the /verify command to verify.'
-                    };
+                    mode = 'SLASH';
+                    const instructionText = interaction.options.getString('instruction_text') || 'Please use the /verify command to verify.';
+
+                    configData.mode = mode;
+                    configData.slashConfig = { instructionText };
+                    configData.embedData.description = instructionText;
                     break;
                 }
                 default: {
                     return interaction.editReply({
-                        content: 'Unknown subcommand.',
+                        content: '❌ Unknown subcommand.',
                         ephemeral: true
                     });
                 }
             }
 
-            // Persist configuration to database
-            const updateData = {
-                'gateway.type': typeKey,
-                'gateway.enabled': true,
-                [`gateway.settings.${typeKey}`]: settings
-            };
+            // Step 1: Save to database AND cache using gateway module
+            const saveResult = await gatewayModule.saveConfiguration(guildId, configData);
 
-            if (role?.id) {
-                updateData['gateway.verifiedRoleId'] = role.id;
-            }
-
-            const savedConfig = await updateGuildConfig(guildId, updateData);
-            if (!savedConfig) {
+            if (!saveResult.success) {
                 return interaction.editReply({
-                    content: 'Failed to save gateway configuration to database.',
+                    content: `❌ Failed to save gateway configuration: ${saveResult.error}`,
                     ephemeral: true
                 });
             }
 
-            logger.info(`Gateway config saved for guild ${guildId} as type ${typeKey}`);
+            logger.info(`✓ Gateway config saved for guild ${guildId} as type ${mode}`);
 
-            // Deploy the gateway message using gatewayManager
+            // Step 2: Deploy the gateway message using gatewayManager
             try {
-                await gatewayManager.deploy(interaction.guild, channel, typeKey, settings);
+                // Prepare settings for gatewayManager
+                const settings = {
+                    embedText: configData.embedData.description,
+                    ...configData.buttonConfig,
+                    ...configData.reactionConfig,
+                    ...configData.triggerConfig,
+                    ...configData.slashConfig
+                };
+
+                await gatewayManager.deploy(interaction.guild, channel, mode, settings);
                 
                 return interaction.editReply({
-                    content: `✅ Gateway deployed as **${typeKey}** in ${channel}!`,
+                    content: `✅ Gateway deployed as **${mode}** in ${channel}!`,
                     ephemeral: true
                 });
             } catch (deployError) {
-                logger.error(`Failed to deploy gateway: ${deployError.message}`);
+                logger.error(`Failed to deploy gateway message: ${deployError.message}`);
                 return interaction.editReply({
-                    content: `Configuration saved, but failed to deploy gateway message: ${deployError.message}`,
+                    content: `⚠️ Configuration saved, but failed to deploy gateway message: ${deployError.message}`,
                     ephemeral: true
                 });
             }
@@ -183,7 +214,7 @@ export default {
             logger.error(`admin/setup-gateway failed: ${error.message}`);
             try {
                 await interaction.editReply({
-                    content: 'An error occurred while deploying the gateway. Check logs.',
+                    content: '❌ An error occurred while deploying the gateway. Check logs.',
                     ephemeral: true
                 });
             } catch (e) {
