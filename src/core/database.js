@@ -1,12 +1,20 @@
 import mongoose from 'mongoose';
 import { logger } from './logger.js';
-import { env } from '../config/environment.js';
 import GuildConfig from './models/GuildConfig.js';
 import UserConfig from './models/UserConfig.js';
+
 let isConnected = false;
+
 export async function connectDatabase() {
-    try { await mongoose.connect(env.MONGO_URI); isConnected = true; logger.info('Database connected successfully'); } 
-    catch (error) { logger.error(`Database connection failed: ${error.message}`); throw error; }
+    try {
+        const mongoUri = process.env.MONGO_URI || 'mongodb://localhost:27017/guardian';
+        await mongoose.connect(mongoUri);
+        isConnected = true;
+        logger.info('Database connected successfully');
+    } catch (error) {
+        logger.error(`Database connection failed: ${error.message}`);
+        throw error;
+    }
 }
 export async function getGuildConfig(guildId) {
     try { let config = await GuildConfig.findOne({ guildId }); if (!config) config = await GuildConfig.create({ guildId }); return config; } 
