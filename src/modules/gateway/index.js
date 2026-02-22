@@ -113,7 +113,6 @@ export default function GatewayModule(client) {
                 try {
                   await message.reply({
                     content: `❌ ${message.member.user.toString()}, I couldn't send you a DM. Please open your Privacy Settings and try again or use /verify.`,
-                    ephemeral: true,
                   });
                 } catch (replyErr) {
                   console.error('[Gateway] Failed to send DM failure notification:', replyErr.message);

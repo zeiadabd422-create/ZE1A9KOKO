@@ -94,22 +94,34 @@ export async function verifyMember(member, config, method) {
     try {
       const dmMessage = config.successDM || 'You have been verified! Welcome to the server.';
       const dmEmbed = createEmbed(config, dmMessage, true);
-      
-      try {
-        await member.user.send({
-          embeds: [dmEmbed],
-        });
-        console.log(`[Gateway] DM sent successfully to ${member.user.tag}`);
-      } catch (dmErr) {
-        // Non-fatal: DM failure shouldn't prevent verification
+
+      // Prefer sending via user object to avoid member cache issues
+      let user = member && member.user ? member.user : null;
+      if (!user && member && member.client) {
+        try {
+          user = await member.client.users.fetch(member.id);
+        } catch (fetchErr) {
+          console.error('[Gateway] Failed to fetch user for DM:', fetchErr.message || fetchErr);
+        }
+      }
+
+      if (!user) {
         dmFailed = true;
-        const dmReason = dmErr.code === 50007 ? 'User has DMs disabled' : dmErr.message;
-        const dmCode = dmErr.code || 'UNKNOWN';
-        console.error(`[Gateway] DM delivery failed for ${member.user.tag} (Code: ${dmCode}): ${dmReason}`);
-        console.log(`[Gateway] DM Error Details: Code=${dmCode}, Message="${dmReason}"`);
+        console.error('[Gateway] Unable to resolve user object for DM delivery');
+      } else {
+        try {
+          await user.send({ embeds: [dmEmbed] });
+          console.log(`[Gateway] DM sent successfully to ${user.tag || user.id}`);
+        } catch (dmErr) {
+          // Non-fatal: DM failure shouldn't prevent verification
+          dmFailed = true;
+          const dmCode = dmErr && (dmErr.code || dmErr.httpStatus) ? (dmErr.code || dmErr.httpStatus) : 'UNKNOWN';
+          const dmReason = dmErr && dmErr.code === 50007 ? 'User has DMs disabled' : (dmErr && dmErr.message ? dmErr.message : JSON.stringify(dmErr));
+          console.error(`[Gateway] DM delivery failed for ${user.tag || user.id} (Code: ${dmCode}): ${dmReason}`);
+        }
       }
     } catch (embedErr) {
-      console.error('[Gateway] Failed to create DM embed:', embedErr.message);
+      console.error('[Gateway] Failed to create DM embed:', embedErr && embedErr.message ? embedErr.message : embedErr);
     }
 
     return { 
