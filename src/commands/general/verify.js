@@ -43,13 +43,13 @@ export default {
       const result = await verifyMember(member, config, 'slash');
 
       if (result.alreadyVerified) {
-        const embed = createEmbed(config, result.message);
+        const embed = createEmbed(config, result.message, 'alreadyVerified');
         await interaction.reply({
           embeds: [embed],
           ephemeral: false,
         });
       } else if (result.success) {
-        const embed = createEmbed(config, '✅ Verification successful! Welcome to the server.');
+        const embed = createEmbed(config, '✅ Verification successful! Welcome to the server.', 'success');
         await interaction.reply({
           embeds: [embed],
           ephemeral: false,

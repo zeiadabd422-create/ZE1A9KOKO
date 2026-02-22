@@ -30,10 +30,10 @@ export default function GatewayModule(client) {
           const result = await verifyMember(interaction.member, config, 'button');
 
           if (result.alreadyVerified) {
-            const embed = createEmbed(config, result.message);
+            const embed = createEmbed(config, result.message, 'alreadyVerified');
             await interaction.reply({ embeds: [embed], ephemeral: false });
           } else if (result.success) {
-            const embed = createEmbed(config, '✅ Verification successful! Welcome to the server.');
+            const embed = createEmbed(config, '✅ Verification successful! Welcome to the server.', 'success');
             await interaction.reply({ embeds: [embed], ephemeral: false });
             
             // If DM failed, send ephemeral notification
@@ -108,7 +108,18 @@ export default function GatewayModule(client) {
             
             if (result.alreadyVerified || result.success) {
               console.log(`[Gateway] User ${message.member.user.tag} verified via trigger word`);
-              // If DM failed, send public ephemeral message
+
+              // Send channel embed using page-specific UI
+              try {
+                const pageKey = result.alreadyVerified ? 'alreadyVerified' : 'success';
+                const msg = result.alreadyVerified ? (result.message || '') : '✅ Verification successful! Welcome to the server.';
+                const channelEmbed = createEmbed(config, msg, pageKey);
+                await message.channel.send({ embeds: [channelEmbed] });
+              } catch (sendErr) {
+                console.error('[Gateway] Failed to send channel embed after verification:', sendErr.message || sendErr);
+              }
+
+              // If DM failed, notify the user in-channel (public) with guidance
               if (result.dmFailed) {
                 try {
                   await message.reply({
@@ -120,6 +131,12 @@ export default function GatewayModule(client) {
               }
             } else {
               console.log(`[Gateway] Verification failed for ${message.author.tag}: ${result.message}`);
+              try {
+                const errEmbed = createEmbed(config, result.message || 'Verification failed.', 'error');
+                await message.channel.send({ embeds: [errEmbed] });
+              } catch (errSend) {
+                console.error('[Gateway] Failed to send error embed:', errSend.message || errSend);
+              }
             }
           } else {
             console.log('[Gateway] Trigger word NOT matched');
@@ -146,8 +163,10 @@ export default function GatewayModule(client) {
         };
 
         if (successDM) configData.successDM = successDM;
-        if (embedTitle) configData.embedTitle = embedTitle;
-        if (embedDescription) configData.embedDescription = embedDescription;
+        // set theme defaults if provided
+        configData.theme = configData.theme || {};
+        if (embedTitle) configData.theme.title = embedTitle;
+        if (embedDescription) configData.theme.description = embedDescription;
         if (slashChannelId) configData.slashChannelId = slashChannelId;
         if (alreadyVerifiedMsg) configData.alreadyVerifiedMsg = alreadyVerifiedMsg;
 
@@ -187,21 +206,52 @@ export default function GatewayModule(client) {
     async customizeUICommand(guildId, title, description, colorHex, imageUrl, triggerEmoji) {
       try {
         const updateData = {};
-        if (title) updateData.embedTitle = title;
-        if (description) updateData.embedDescription = description;
-        if (colorHex) updateData.embedColor = colorHex;
-        if (imageUrl) updateData.embedImage = imageUrl;
+        if (title) updateData['theme.title'] = title;
+        if (description) updateData['theme.description'] = description;
+        if (colorHex) updateData['theme.color'] = colorHex;
+        if (imageUrl) updateData['theme.image'] = imageUrl;
         if (triggerEmoji) updateData.triggerEmoji = triggerEmoji;
 
         const config = await GatewayConfig.findOneAndUpdate(
           { guildId },
-          updateData,
+          { $set: updateData },
           { new: true }
         );
 
         return { success: true, config };
       } catch (err) {
         console.error('[Gateway] Customize UI error:', err);
+        return { success: false, error: err.message };
+      }
+    },
+
+    /**
+     * Customize a specific page (success / alreadyVerified / error)
+     */
+    async customizePageCommand(guildId, page, title, description, colorHex, imageUrl) {
+      try {
+        const updateData = {};
+        const allowed = ['success', 'alreadyVerified', 'error'];
+        if (!allowed.includes(page)) {
+          return { success: false, error: 'Invalid page' };
+        }
+
+        const fieldPrefix = page === 'success' ? 'successUI' : (page === 'alreadyVerified' ? 'alreadyVerifiedUI' : 'errorUI');
+
+        if (title !== undefined && title !== null) updateData[`${fieldPrefix}.title`] = title;
+        if (description !== undefined && description !== null) updateData[`${fieldPrefix}.desc`] = description;
+        if (colorHex !== undefined && colorHex !== null) updateData[`${fieldPrefix}.color`] = colorHex;
+        if (imageUrl !== undefined && imageUrl !== null) updateData[`${fieldPrefix}.image`] = imageUrl;
+
+        const config = await GatewayConfig.findOneAndUpdate(
+          { guildId },
+          { $set: updateData },
+          { new: true }
+        );
+
+        return { success: true, config };
+      } catch (err) {
+        console.error('[Gateway] Customize page error:', err);
         return { success: false, error: err.message };
       }
     },

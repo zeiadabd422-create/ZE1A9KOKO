@@ -111,6 +111,46 @@ export default {
     )
     .addSubcommand(subcommand =>
       subcommand
+        .setName('customize_page')
+        .setDescription('Customize a specific verification page (Success / AlreadyVerified / Error)')
+        .addStringOption(option =>
+          option
+            .setName('page')
+            .setDescription('Which page to customize')
+            .setRequired(true)
+            .addChoices(
+              { name: 'Success', value: 'success' },
+              { name: 'AlreadyVerified', value: 'alreadyVerified' },
+              { name: 'Error', value: 'error' }
+            )
+        )
+        .addStringOption(option =>
+          option
+            .setName('title')
+            .setDescription('Embed title for this page')
+            .setRequired(false)
+        )
+        .addStringOption(option =>
+          option
+            .setName('description')
+            .setDescription('Embed description for this page')
+            .setRequired(false)
+        )
+        .addStringOption(option =>
+          option
+            .setName('color')
+            .setDescription('Hex color code (e.g., #2ecc71) for this page')
+            .setRequired(false)
+        )
+        .addStringOption(option =>
+          option
+            .setName('image_url')
+            .setDescription('Banner image URL for this page')
+            .setRequired(false)
+        )
+    )
+    .addSubcommand(subcommand =>
+      subcommand
         .setName('customize_logic')
         .setDescription('Customize verification messages and behavior')
         .addStringOption(option =>
@@ -262,6 +302,37 @@ export default {
             content: `❌ Disable failed: ${result.error}`,
             ephemeral: true,
           });
+        }
+      }
+      else if (subcommand === 'customize_page') {
+        const page = options.getString('page', true);
+        const title = options.getString('title');
+        const description = options.getString('description');
+        const color = options.getString('color');
+        const imageUrl = options.getString('image_url');
+
+        const result = await client.gateway.customizePageCommand(
+          guild.id,
+          page,
+          title,
+          description,
+          color,
+          imageUrl
+        );
+
+        if (result.success) {
+          const updates = [];
+          if (title) updates.push(`**Title:** ${title}`);
+          if (description) updates.push(`**Description:** ${description}`);
+          if (color) updates.push(`**Color:** ${color}`);
+          if (imageUrl) updates.push(`**Image:** ${imageUrl}`);
+
+          await interaction.reply({
+            content: `✅ Page customization updated for **${page}**!\n\n${updates.join('\n')}`,
+            ephemeral: true,
+          });
+        } else {
+          await interaction.reply({ content: `❌ Update failed: ${result.error}`, ephemeral: true });
         }
       }
     } catch (err) {

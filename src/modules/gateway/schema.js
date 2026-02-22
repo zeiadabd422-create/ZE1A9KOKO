@@ -64,6 +64,45 @@ const GatewaySchema = new mongoose.Schema(
       default: '',
       description: 'URL for banner/thumbnail image in verification embeds',
     },
+    // Theme: main bot theme used as fallback for specific pages
+    theme: {
+      title: {
+        type: String,
+        default: '🔐 Server Verification',
+      },
+      description: {
+        type: String,
+        default: 'Click the button below to verify your account and gain access to the server.',
+      },
+      color: {
+        type: String,
+        default: '#2ecc71',
+      },
+      image: {
+        type: String,
+        default: '',
+      },
+    },
+
+    // Page-specific UI overrides
+    successUI: {
+      title: { type: String, default: '' },
+      desc: { type: String, default: '' },
+      color: { type: String, default: '' },
+      image: { type: String, default: '' },
+    },
+    alreadyVerifiedUI: {
+      title: { type: String, default: '' },
+      desc: { type: String, default: '' },
+      color: { type: String, default: '' },
+      image: { type: String, default: '' },
+    },
+    errorUI: {
+      title: { type: String, default: '' },
+      desc: { type: String, default: '' },
+      color: { type: String, default: '' },
+      image: { type: String, default: '' },
+    },
     triggerEmoji: {
       type: String,
       default: '✅',

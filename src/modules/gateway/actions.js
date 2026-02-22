@@ -12,19 +12,34 @@ import { validateRaidShield, getAccountAgeDays } from './checker.js';
  * @param {boolean} isSuccess - Whether this is a success embed
  * @returns {Object} Embed object
  */
-export function createEmbed(config, message, isSuccess = true) {
-  const embedColor = config.embedColor ? parseInt(config.embedColor.replace('#', ''), 16) : 0x2ecc71;
-  
+/**
+ * Build an embed using page-specific UI or falling back to theme
+ * @param {Object} config - Gateway config from DB
+ * @param {string} overrideMessage - Optional message to use for description
+ * @param {string} pageKey - 'success' | 'alreadyVerified' | 'error' | undefined
+ */
+export function createEmbed(config, overrideMessage = '', pageKey = '') {
+  const theme = config.theme || {};
+
+  // select page object
+  let page = {};
+  if (pageKey === 'success') page = config.successUI || {};
+  else if (pageKey === 'alreadyVerified') page = config.alreadyVerifiedUI || {};
+  else if (pageKey === 'error') page = config.errorUI || {};
+
+  const title = page.title || theme.title || '🔐 Server Verification';
+  const description = overrideMessage || page.desc || theme.description || 'Verification processed.';
+  const colorHex = page.color || theme.color || '#2ecc71';
+  const color = parseInt((colorHex || '#2ecc71').replace('#', ''), 16);
   const embed = {
-    title: config.embedTitle || '🔐 Server Verification',
-    description: message || config.embedDescription || 'Verification processed.',
-    color: embedColor,
+    title,
+    description,
+    color,
     footer: { text: 'Guardian Bot v4.0' },
   };
 
-  if (config.embedImage && config.embedImage.trim()) {
-    embed.image = { url: config.embedImage };
-  }
+  const imageUrl = page.image || theme.image || '';
+  if (imageUrl && imageUrl.trim()) embed.image = { url: imageUrl };
 
   return embed;
 }
