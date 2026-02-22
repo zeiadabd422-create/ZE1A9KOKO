@@ -44,7 +44,7 @@ export default {
       if (flow.success) {
         await interaction.reply({
           content: '✅ Verification successful! Welcome to the server.',
-          ephemeral: true,
+          ephemeral: false,
         });
       } else {
         await interaction.reply({

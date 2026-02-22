@@ -20,7 +20,6 @@ export default {
             .setRequired(true)
             .addChoices(
               { name: 'Button', value: 'button' },
-              { name: 'Reaction', value: 'reaction' },
               { name: 'Trigger', value: 'trigger' },
               { name: 'Slash', value: 'slash' },
               { name: 'Join', value: 'join-check' }

@@ -25,7 +25,7 @@ const GatewaySchema = new mongoose.Schema(
     },
     method: {
       type: String,
-      enum: ['button', 'reaction', 'trigger', 'slash', 'join-check'],
+      enum: ['button', 'trigger', 'slash', 'join-check'],
       default: 'button',
       description: 'Primary verification method',
     },
@@ -46,13 +46,8 @@ const GatewaySchema = new mongoose.Schema(
     },
     embedDescription: {
       type: String,
-      default: 'Click the button below or react to verify your account and gain access to the server.',
+      default: 'Click the button below to verify your account and gain access to the server.',
       description: 'Description for the verification embed',
-    },
-    reactionEmoji: {
-      type: String,
-      default: '✅',
-      description: 'Emoji used for reaction verification',
     },
     raidMode: {
       type: Boolean,

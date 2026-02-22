@@ -71,7 +71,8 @@ export async function sendVerificationDM(user, message, config = {}) {
     return { success: true, message: 'DM sent successfully' };
   } catch (err) {
     // If DM fails, return a non-fatal error (user might have DMs disabled)
-    return { success: false, message: `Failed to send DM: ${err.message}` };
+    const dmFailReason = err.code === 50007 ? 'User has DMs disabled' : err.message;
+    return { success: false, message: `Failed to send DM: ${dmFailReason}` };
   }
 }
 
@@ -146,7 +147,7 @@ export async function sendVerificationPrompt(channel, config) {
     const embed = {
       color: 0x2ecc71,
       title: config.embedTitle || '🔐 Server Verification',
-      description: config.embedDescription || 'Click the button below or react to verify your account and gain access to the server.',
+      description: config.embedDescription || 'Click the button below to verify your account and gain access to the server.',
       footer: { text: 'Guardian Bot v4.0' },
     };
 
@@ -176,17 +177,6 @@ export async function sendVerificationPrompt(channel, config) {
       embeds: [embed],
       components: components.length > 0 ? components : undefined,
     });
-
-    // If using reaction method, ensure the bot pre-adds the configured reaction
-    if (config.method === 'reaction') {
-      try {
-        const emoji = config.reactionEmoji || '✅';
-        await sent.react(emoji).catch(() => {});
-      } catch (err) {
-        // Non-fatal: log and continue
-        console.error('[Gateway] Failed to add reaction to prompt:', err.message);
-      }
-    }
 
     return { success: true, message: 'Verification prompt sent' };
   } catch (err) {
