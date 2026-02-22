@@ -1,7 +1,6 @@
 import { SlashCommandBuilder } from 'discord.js';
 import GatewayConfig from '../../modules/gateway/schema.js';
-import { performVerificationFlow, createVerificationEmbed } from '../../modules/gateway/actions.js';
-import { performVerificationCheck } from '../../modules/gateway/checker.js';
+import { verifyMember, createEmbed } from '../../modules/gateway/actions.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -10,7 +9,8 @@ export default {
 
   async execute(interaction) {
     try {
-      const { client, guild, member } = interaction;
+      const { guild, member } = interaction;
+
       if (!guild) {
         await interaction.reply({ content: 'This command can only be used in a server.', ephemeral: true });
         return;
@@ -27,10 +27,10 @@ export default {
         return;
       }
 
-      // Check if user is in the correct channel for /verify
+      // Channel visibility check
       if (config.slashChannelId && interaction.channelId !== config.slashChannelId) {
-        const slashChannel = guild.channels.cache.get(config.slashChannelId);
-        const channelMention = slashChannel ? `<#${config.slashChannelId}>` : '#unknown-channel';
+        const channel = guild.channels.cache.get(config.slashChannelId);
+        const channelMention = channel ? `<#${config.slashChannelId}>` : '#unknown-channel';
         await interaction.reply({
           content: `❌ Use this command in ${channelMention}`,
           ephemeral: true,
@@ -38,29 +38,24 @@ export default {
         return;
       }
 
-      // Perform comprehensive verification check first
-      const check = performVerificationCheck(member.user, member, config);
+      // Perform verification
+      const result = await verifyMember(member, config, 'slash');
 
-      if (!check.verified) {
+      if (result.alreadyVerified) {
+        const embed = createEmbed(config, result.message);
         await interaction.reply({
-          content: `❌ Verification failed: ${check.errors.join(', ')}`,
-          ephemeral: true,
+          embeds: [embed],
+          ephemeral: false,
         });
-        return;
-      }
-
-      // If check passes, perform verification flow: add roles, send DM, etc.
-      const flow = await performVerificationFlow(member, null, config);
-
-      if (flow.success) {
-        const embed = createVerificationEmbed(config, '✅ Verification successful! Welcome to the server.', true);
+      } else if (result.success) {
+        const embed = createEmbed(config, '✅ Verification successful! Welcome to the server.');
         await interaction.reply({
           embeds: [embed],
           ephemeral: false,
         });
       } else {
         await interaction.reply({
-          content: `❌ Verification failed: ${flow.rolesToast?.message || flow.dmToast?.message || 'Unknown error'}`,
+          content: `❌ Verification failed: ${result.message}`,
           ephemeral: true,
         });
       }

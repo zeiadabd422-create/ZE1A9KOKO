@@ -76,6 +76,58 @@ export default {
     )
     .addSubcommand(subcommand =>
       subcommand
+        .setName('customize_ui')
+        .setDescription('Customize the visual appearance of verification embeds')
+        .addStringOption(option =>
+          option
+            .setName('title')
+            .setDescription('Embed title')
+            .setRequired(false)
+        )
+        .addStringOption(option =>
+          option
+            .setName('description')
+            .setDescription('Embed description')
+            .setRequired(false)
+        )
+        .addStringOption(option =>
+          option
+            .setName('color_hex')
+            .setDescription('Hex color code (e.g., #2ecc71)')
+            .setRequired(false)
+        )
+        .addStringOption(option =>
+          option
+            .setName('image_url')
+            .setDescription('URL for banner image')
+            .setRequired(false)
+        )
+        .addStringOption(option =>
+          option
+            .setName('trigger_emoji')
+            .setDescription('Emoji for trigger method reactions')
+            .setRequired(false)
+        )
+    )
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName('customize_logic')
+        .setDescription('Customize verification messages and behavior')
+        .addStringOption(option =>
+          option
+            .setName('already_verified_msg')
+            .setDescription('Message when user is already verified')
+            .setRequired(false)
+        )
+        .addStringOption(option =>
+          option
+            .setName('success_dm')
+            .setDescription('Success message sent to user DM')
+            .setRequired(false)
+        )
+    )
+    .addSubcommand(subcommand =>
+      subcommand
         .setName('disable')
         .setDescription('Disable gateway verification for your server')
     ),
@@ -136,6 +188,65 @@ export default {
         } else {
           await interaction.reply({
             content: `❌ Setup failed: ${result.error}`,
+            ephemeral: true,
+          });
+        }
+      } else if (subcommand === 'customize_ui') {
+        const title = options.getString('title');
+        const description = options.getString('description');
+        const colorHex = options.getString('color_hex');
+        const imageUrl = options.getString('image_url');
+        const triggerEmoji = options.getString('trigger_emoji');
+
+        const result = await client.gateway.customizeUICommand(
+          guild.id,
+          title,
+          description,
+          colorHex,
+          imageUrl,
+          triggerEmoji
+        );
+
+        if (result.success) {
+          const updates = [];
+          if (title) updates.push(`**Title:** ${title}`);
+          if (description) updates.push(`**Description:** ${description}`);
+          if (colorHex) updates.push(`**Color:** ${colorHex}`);
+          if (imageUrl) updates.push(`**Image:** ${imageUrl}`);
+          if (triggerEmoji) updates.push(`**Trigger Emoji:** ${triggerEmoji}`);
+
+          await interaction.reply({
+            content: `✅ UI customization updated!\n\n${updates.join('\n')}`,
+            ephemeral: true,
+          });
+        } else {
+          await interaction.reply({
+            content: `❌ Customization failed: ${result.error}`,
+            ephemeral: true,
+          });
+        }
+      } else if (subcommand === 'customize_logic') {
+        const alreadyVerifiedMsg = options.getString('already_verified_msg');
+        const successDM = options.getString('success_dm');
+
+        const result = await client.gateway.customizeLogicCommand(
+          guild.id,
+          alreadyVerifiedMsg,
+          successDM
+        );
+
+        if (result.success) {
+          const updates = [];
+          if (alreadyVerifiedMsg) updates.push(`**Already Verified Message:** ${alreadyVerifiedMsg}`);
+          if (successDM) updates.push(`**Success DM:** ${successDM}`);
+
+          await interaction.reply({
+            content: `✅ Logic customization updated!\n\n${updates.join('\n')}`,
+            ephemeral: true,
+          });
+        } else {
+          await interaction.reply({
+            content: `❌ Customization failed: ${result.error}`,
             ephemeral: true,
           });
         }

@@ -39,6 +39,11 @@ const GatewaySchema = new mongoose.Schema(
       default: 'You have been verified! Welcome to the server.',
       description: 'Private message sent to user upon successful verification',
     },
+    alreadyVerifiedMsg: {
+      type: String,
+      default: 'You are already verified in this server!',
+      description: 'Message sent when user is already verified',
+    },
     embedTitle: {
       type: String,
       default: '🔐 Server Verification',

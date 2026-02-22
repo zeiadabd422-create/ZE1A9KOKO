@@ -1,28 +1,16 @@
 /**
  * Gateway Module - Main Entry Point
- * Handles verification for 5 methods: Button, Reaction, Trigger (Word), Slash, and Join-check
+ * Handles verification for Button, Trigger, Slash, and Join-check methods
  */
 
 import GatewayConfig from './schema.js';
-import {
-  calculateTrustScore,
-  checkTriggerWord,
-  validateRaidShield,
-  performVerificationCheck,
-  getAccountAgeDays,
-} from './checker.js';
-import {
-  grantRoles,
-  sendVerificationDM,
-  reactWithCheckmark,
-  performVerificationFlow,
-  sendVerificationPrompt,
-} from './actions.js';
+import { checkTriggerWord, performVerificationCheck } from './checker.js';
+import { verifyMember, sendVerificationPrompt, sendChannelEmbed, createEmbed } from './actions.js';
 
 /**
  * Gateway Module Factory
  * @param {Client} client - Discord client
- * @returns {Object} Gateway module with handlers
+ * @returns {Object} Gateway module with handlers and commands
  */
 export default function GatewayModule(client) {
   return {
@@ -34,13 +22,18 @@ export default function GatewayModule(client) {
         const config = await GatewayConfig.findOne({ guildId: interaction.guildId });
         if (!config || !config.enabled) return;
 
-        // Only handle gateway-related buttons
-        if (!interaction.customId.startsWith('gateway_')) return;
-
         if (interaction.customId === 'gateway_verify_button') {
-          await this.verifyUser(interaction.member, interaction, config, 'button');
-          await interaction.deferReply({ ephemeral: true }).catch(() => {});
-          await interaction.editReply({ content: '✓ Verification processed!' }).catch(() => {});
+          const result = await verifyMember(interaction.member, config, 'button');
+
+          if (result.alreadyVerified) {
+            const embed = createEmbed(config, result.message);
+            await interaction.reply({ embeds: [embed], ephemeral: false });
+          } else if (result.success) {
+            const embed = createEmbed(config, '✅ Verification successful! Welcome to the server.');
+            await interaction.reply({ embeds: [embed], ephemeral: false });
+          } else {
+            await interaction.reply({ content: `❌ ${result.message}`, ephemeral: true });
+          }
         }
       } catch (err) {
         console.error('[Gateway] Interaction handler error:', err);
@@ -59,28 +52,30 @@ export default function GatewayModule(client) {
      */
     async handleMessage(message) {
       try {
-        // Allow module to decide how to handle messages (including bot messages)
         const config = await GatewayConfig.findOne({ guildId: message.guildId });
         if (!config || !config.enabled) return;
 
         // Handle trigger word method
         if (config.method === 'trigger') {
-          // Ignore empty messages and trim content for case-insensitive comparison
-          let content = (message.content || '').toString().trim();
+          // Case-insensitive, trimmed content
+          const content = (message.content || '').toString().trim();
           if (!content) return;
 
-          // Case-insensitive trigger word check
           if (checkTriggerWord(content, config.triggerWord)) {
-            // First react with the configured trigger emoji
+            // React with trigger emoji first
             try {
               const emoji = config.triggerEmoji || '✅';
               await message.react(emoji).catch(() => {});
             } catch (err) {
-              console.error('[Gateway] Failed to react to trigger message:', err.message);
+              console.error('[Gateway] Failed to react:', err.message);
             }
 
-            // Then perform verification
-            await this.verifyUser(message.member, message, config, 'trigger');
+            // Verify member
+            const result = await verifyMember(message.member, config, 'trigger');
+            
+            if (result.alreadyVerified || result.success) {
+              console.log(`[Gateway] User ${message.member.user.tag} verified via trigger word`);
+            }
           }
         }
       } catch (err) {
@@ -89,92 +84,12 @@ export default function GatewayModule(client) {
     },
 
     /**
-     * Core verification logic
-     * Checks conditions, grants roles, sends DM, and handles reactions
+     * Setup gateway for a guild
      */
-    async verifyUser(member, interaction, config, method) {
-      try {
-        if (!member || !member.user) {
-          console.error('[Gateway] Invalid member object');
-          return;
-        }
-
-        // Perform comprehensive verification check
-        const check = performVerificationCheck(member.user, member, config);
-
-        // If raid shield failed, deny verification
-        if (!check.verified) {
-          if (interaction.reply) {
-            await interaction.reply({
-              content: `❌ Verification failed: ${check.errors.join(', ')}`,
-              ephemeral: true,
-            });
-          }
-          return;
-        }
-
-        // Detect if second parameter is a Message (has content) or Interaction
-        // Message objects have a 'content' property, Interaction objects don't
-        const triggerMessage = (interaction && typeof interaction.content === 'string') ? interaction : null;
-        
-        // Execute verification flow: add roles, send DM, react if needed
-        const flow = await performVerificationFlow(member, triggerMessage, config);
-
-        // Log results
-        if (method === 'trigger') {
-          console.log(`[Gateway] User ${member.user.tag} verified via trigger word. Trust Score: ${check.trustScore}`);
-        } else {
-          console.log(`[Gateway] User ${member.user.tag} verified via ${method}. Trust Score: ${check.trustScore}`);
-        }
-
-        // Send success reply if this is an interaction
-        if (interaction.reply && typeof interaction.reply === 'function') {
-          await interaction.reply({
-            content: `✅ Verification successful! Welcome to the server.`,
-            ephemeral: true,
-          });
-        }
-      } catch (err) {
-        console.error('[Gateway] Verification error:', err);
-      }
-    },
-
-    /**
-     * Utility: Get gateway config for a guild
-     */
-    async getConfig(guildId) {
-      try {
-        return await GatewayConfig.findOne({ guildId });
-      } catch (err) {
-        console.error('[Gateway] Error fetching config:', err);
-        return null;
-      }
-    },
-
-    /**
-     * Utility: Create or update gateway config
-     */
-    async setConfig(guildId, configData) {
-      try {
-        const config = await GatewayConfig.findOneAndUpdate(
-          { guildId },
-          { ...configData, guildId },
-          { upsert: true, new: true }
-        );
-        return config;
-      } catch (err) {
-        console.error('[Gateway] Error updating config:', err);
-        return null;
-      }
-    },
-
-    /**
-     * Command: Setup gateway for a guild
-     * Usage in a slash command: /gateway setup <method> <verified_role> <unverified_role> <channel>
-     */
-    async setupCommand(guildId, method, verifiedRoleId, unverifiedRoleId, channelId, triggerWord = '', successDM = undefined, embedTitle = undefined, embedDescription = undefined, slashChannelId = '') {
+    async setupCommand(guildId, method, verifiedRoleId, unverifiedRoleId, channelId, triggerWord = '', successDM = undefined, embedTitle = undefined, embedDescription = undefined, slashChannelId = '', alreadyVerifiedMsg = undefined) {
       try {
         const configData = {
+          guildId,
           method,
           verifiedRole: verifiedRoleId,
           unverifiedRole: unverifiedRoleId,
@@ -183,20 +98,24 @@ export default function GatewayModule(client) {
           enabled: true,
         };
 
-        // Add optional parameters if provided
         if (successDM) configData.successDM = successDM;
         if (embedTitle) configData.embedTitle = embedTitle;
         if (embedDescription) configData.embedDescription = embedDescription;
         if (slashChannelId) configData.slashChannelId = slashChannelId;
+        if (alreadyVerifiedMsg) configData.alreadyVerifiedMsg = alreadyVerifiedMsg;
 
-        const config = await this.setConfig(guildId, configData);
+        const config = await GatewayConfig.findOneAndUpdate(
+          { guildId },
+          configData,
+          { upsert: true, new: true }
+        );
 
         // Send verification prompt to the channel
         const guild = client.guilds.cache.get(guildId);
         if (guild) {
           const channel = guild.channels.cache.get(channelId);
           if (channel) {
-            const promptResult = await sendVerificationPrompt(channel, config);
+            await sendVerificationPrompt(channel, config);
           }
         }
 
@@ -208,7 +127,54 @@ export default function GatewayModule(client) {
     },
 
     /**
-     * Command: Disable gateway for a guild
+     * Customize UI settings
+     */
+    async customizeUICommand(guildId, title, description, colorHex, imageUrl, triggerEmoji) {
+      try {
+        const updateData = {};
+        if (title) updateData.embedTitle = title;
+        if (description) updateData.embedDescription = description;
+        if (colorHex) updateData.embedColor = colorHex;
+        if (imageUrl) updateData.embedImage = imageUrl;
+        if (triggerEmoji) updateData.triggerEmoji = triggerEmoji;
+
+        const config = await GatewayConfig.findOneAndUpdate(
+          { guildId },
+          updateData,
+          { new: true }
+        );
+
+        return { success: true, config };
+      } catch (err) {
+        console.error('[Gateway] Customize UI error:', err);
+        return { success: false, error: err.message };
+      }
+    },
+
+    /**
+     * Customize logic/messages
+     */
+    async customizeLogicCommand(guildId, alreadyVerifiedMsg, successDM) {
+      try {
+        const updateData = {};
+        if (alreadyVerifiedMsg) updateData.alreadyVerifiedMsg = alreadyVerifiedMsg;
+        if (successDM) updateData.successDM = successDM;
+
+        const config = await GatewayConfig.findOneAndUpdate(
+          { guildId },
+          updateData,
+          { new: true }
+        );
+
+        return { success: true, config };
+      } catch (err) {
+        console.error('[Gateway] Customize logic error:', err);
+        return { success: false, error: err.message };
+      }
+    },
+
+    /**
+     * Disable gateway for a guild
      */
     async disableCommand(guildId) {
       try {
