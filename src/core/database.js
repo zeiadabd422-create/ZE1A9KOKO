@@ -1,4 +1,26 @@
 import mongoose from 'mongoose';
+
+export async function connectDatabase() {
+  const uri = process.env.MONGO_URI;
+  if (!uri) {
+    console.warn('connectDatabase: MONGO_URI not provided; skipping MongoDB connection');
+    return;
+  }
+
+  try {
+    await mongoose.connect(uri, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+    console.log('MongoDB connected');
+  } catch (err) {
+    console.error('MongoDB connection error:', err);
+    throw err;
+  }
+}
+
+export default connectDatabase;
+import mongoose from 'mongoose';
 import { logger } from './logger.js';
 import GuildConfig from './models/GuildConfig.js';
 import UserConfig from './models/UserConfig.js';
