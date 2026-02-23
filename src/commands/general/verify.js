@@ -6,7 +6,7 @@ import { validateRaidShield } from '../../modules/gateway/checker.js';
 export default {
   data: new SlashCommandBuilder()
     .setName('verify')
-    .setDescription('Run the verification flow (if Slash method is enabled).'),
+    .setDescription('Run the verification flow.'),
 
   async execute(interaction) {
     try {
@@ -23,10 +23,24 @@ export default {
         return;
       }
 
-      // Channel visibility check: /verify is PRIVATE elsewhere, PUBLIC only in slashChannelId
-      if (config.slashChannelId && interaction.channelId !== config.slashChannelId) {
-        const channel = guild.channels.cache.get(config.slashChannelId);
-        const channelMention = channel ? `<#${config.slashChannelId}>` : '#unknown-channel';
+      // Only allow /verify if method is slash
+      if (config.method !== 'slash') {
+        const methodNames = {
+          button: 'button',
+          trigger: 'trigger word',
+          join: 'join',
+        };
+        await interaction.reply({
+          content: `❌ This server uses the **${methodNames[config.method]}** verification method, not the slash command.`,
+          ephemeral: true,
+        });
+        return;
+      }
+
+      // STRICT CHANNEL LOCKDOWN: /verify slash command only works in the configured channel
+      if (interaction.channelId !== config.channel) {
+        const channel = guild.channels.cache.get(config.channel);
+        const channelMention = channel ? `<#${config.channel}>` : '#unknown-channel';
         await interaction.reply({
           content: `❌ This command is only available in ${channelMention}`,
           ephemeral: true,

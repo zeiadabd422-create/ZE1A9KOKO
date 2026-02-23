@@ -3,6 +3,7 @@
  * Core verification logic with styled embed responses
  */
 
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { validateRaidShield, getAccountAgeDays } from './checker.js';
 
 /**
@@ -190,21 +191,17 @@ export async function sendVerificationPrompt(channel, config) {
       embeds: [embed],
     };
 
-    // For button method, create a button
+    // For button method, create a button with ActionRowBuilder
     if (config.method === 'button') {
-      payload.components = [
-        {
-          type: 1, // ActionRow
-          components: [
-            {
-              type: 2, // Button
-              style: 1, // Primary
-              label: 'Verify',
-              custom_id: 'gateway_verify_button',
-            },
-          ],
-        },
-      ];
+      const button = new ButtonBuilder()
+        .setCustomId('gateway_verify_button')
+        .setLabel('Verify')
+        .setStyle(ButtonStyle.Primary);
+
+      const actionRow = new ActionRowBuilder()
+        .addComponents(button);
+
+      payload.components = [actionRow];
     }
 
     // For trigger method, add instructions

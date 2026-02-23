@@ -8,6 +8,17 @@ const GatewaySchema = new mongoose.Schema(
       unique: true,
       index: true,
     },
+    method: {
+      type: String,
+      enum: ['button', 'trigger', 'slash', 'join'],
+      default: 'button',
+      description: 'Verification method: button, trigger, slash, or join',
+    },
+    channel: {
+      type: String,
+      required: true,
+      description: 'Channel where verification method is active',
+    },
     verifiedRole: {
       type: String,
       required: true,
@@ -17,22 +28,6 @@ const GatewaySchema = new mongoose.Schema(
       type: String,
       required: true,
       description: 'Role ID to remove when user is verified (penalty role)',
-    },
-    buttonChannelId: {
-      type: String,
-      default: '',
-      description: 'Channel where verification button is posted',
-    },
-    triggerChannelId: {
-      type: String,
-      default: '',
-      description: 'Channel where trigger word verification is processed',
-    },
-    method: {
-      type: String,
-      enum: ['button', 'trigger', 'slash', 'join-check', 'multi'],
-      default: 'multi',
-      description: 'Verification method(s): button, trigger, slash, or multi for all simultaneous',
     },
     triggerWord: {
       type: String,
@@ -108,36 +103,25 @@ const GatewaySchema = new mongoose.Schema(
       color: { type: String, default: '' },
       image: { type: String, default: '' },
     },
-    triggerEmoji: {
-      type: String,
-      default: '✅',
-      description: 'Emoji used when trigger word is matched',
+
+    enabled: {
+      type: Boolean,
+      default: true,
+      description: 'Whether gateway is enabled for this guild',
     },
-    slashChannelId: {
-      type: String,
-      default: '',
-      description: 'Channel where /verify command is allowed (if not set, allowed everywhere)',
-    },
+
     raidMode: {
       type: Boolean,
       default: false,
-      description: 'If true, activates Account Age check (Raid Shield)',
+      description: 'Enable account age validation (raid shield)',
     },
     minAccountAge: {
       type: Number,
       default: 7,
-      description: 'Minimum account age in days required (if raidMode enabled)',
-    },
-    enabled: {
-      type: Boolean,
-      default: true,
-      description: 'Whether the gateway module is enabled for this guild',
+      description: 'Minimum account age in days for raid shield',
     },
   },
-  {
-    timestamps: true,
-    collection: 'gateway_configs',
-  }
+  { timestamps: true }
 );
 
 export default mongoose.model('GatewayConfig', GatewaySchema);

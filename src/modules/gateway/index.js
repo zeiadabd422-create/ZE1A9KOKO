@@ -1,6 +1,6 @@
 /**
  * Gateway Module - Main Entry Point
- * Handles verification for Button, Trigger, Slash, and Join-check methods
+ * Simplified single-method setup with strict channel lockdown
  */
 
 import GatewayConfig from './schema.js';
@@ -28,11 +28,18 @@ export default function GatewayModule(client) {
         if (interaction.customId === 'gateway_verify_button') {
           console.log(`[Gateway] Button pressed by ${interaction.user.tag}`);
           
-          // STRICT CHANNEL RESTRICTION: Only respond to button in the designated button channel
-          if (interaction.channelId !== config.buttonChannelId) {
-            console.log(`[Gateway] Button pressed in wrong channel: ${interaction.channelId} (expected button channel ${config.buttonChannelId}), ignoring`);
+          // STRICT CHANNEL LOCKDOWN: Button only works in configured channel
+          if (interaction.channelId !== config.channel) {
+            console.log(`[Gateway] Button pressed in wrong channel: ${interaction.channelId} (expected ${config.channel}), ignoring`);
             return;
           }
+
+          // Only respond to button if method is 'button'
+          if (config.method !== 'button') {
+            console.log(`[Gateway] Button pressed but method is '${config.method}', not 'button', ignoring`);
+            return;
+          }
+
           const result = await verifyMember(interaction.member, config, 'button');
 
           if (result.alreadyVerified) {
@@ -80,15 +87,19 @@ export default function GatewayModule(client) {
           return;
         }
 
-        // STRICT CHANNEL RESTRICTION: Only respond to trigger words in the designated trigger channel
-        if (message.channelId !== config.triggerChannelId) {
-          console.log(`[Gateway] Message in wrong channel: ${message.channelId} (expected trigger channel ${config.triggerChannelId}), ignoring`);
+        // Only respond to trigger method
+        if (config.method !== 'trigger') {
           return;
         }
 
-        // Always process trigger words if a trigger word is configured
+        // STRICT CHANNEL LOCKDOWN: Trigger only works in configured channel
+        if (message.channelId !== config.channel) {
+          console.log(`[Gateway] Trigger message in wrong channel: ${message.channelId} (expected ${config.channel}), ignoring`);
+          return;
+        }
+
+        // Process trigger word if configured
         if (config.triggerWord && config.triggerWord.trim()) {
-          // Case-insensitive, trimmed content
           const content = (message.content || '').toString().trim().toLowerCase();
           const triggerWordLower = (config.triggerWord || '').toString().trim().toLowerCase();
           
@@ -103,7 +114,7 @@ export default function GatewayModule(client) {
             console.log(`[Gateway] Trigger word matched for ${message.author.tag} in verification channel`);
             // React with trigger emoji first (public response in verification channel)
             try {
-              const emoji = config.triggerEmoji || '✅';
+              const emoji = '✅';
               await message.react(emoji).catch(() => {});
             } catch (err) {
               console.error('[Gateway] Failed to react:', err.message);
@@ -154,23 +165,23 @@ export default function GatewayModule(client) {
     },
 
     /**
-     * Setup gateway for a guild
+     * Setup gateway for a guild - SIMPLIFIED SINGLE METHOD
      */
-    async setupCommand(guildId, verifiedRoleId, unverifiedRoleId, buttonChannelId, triggerChannelId = '', slashChannelId = '', triggerWord = '', successDM = undefined) {
+    async setupCommand(guildId, method, channelId, verifiedRoleId, unverifiedRoleId, triggerWord = '') {
       try {
         const configData = {
           guildId,
+          method,
+          channel: channelId,
           verifiedRole: verifiedRoleId,
           unverifiedRole: unverifiedRoleId,
-          buttonChannelId,
-          triggerChannelId,
-          slashChannelId,
-          method: 'multi',
-          triggerWord,
           enabled: true,
         };
 
-        if (successDM) configData.successDM = successDM;
+        // Only add trigger word if method is trigger
+        if (method === 'trigger' && triggerWord?.trim()) {
+          configData.triggerWord = triggerWord.trim();
+        }
 
         const config = await GatewayConfig.findOneAndUpdate(
           { guildId },
@@ -179,23 +190,25 @@ export default function GatewayModule(client) {
         );
 
         console.log(`[Gateway] Setup command executed for guild ${guildId}`);
-        console.log(`  - Button Channel: ${buttonChannelId}`);
-        if (triggerChannelId) console.log(`  - Trigger Channel: ${triggerChannelId}`);
-        if (slashChannelId) console.log(`  - Slash Channel: ${slashChannelId}`);
+        console.log(`  - Method: ${method}`);
+        console.log(`  - Channel: ${channelId}`);
+        if (triggerWord) console.log(`  - Trigger Word: ${triggerWord}`);
 
-        // Send verification prompt to the button channel
-        const guild = client.guilds.cache.get(guildId);
-        if (guild) {
-          const channel = guild.channels.cache.get(buttonChannelId);
-          if (channel) {
-            console.log(`[Gateway] Sending verification prompt to button channel ${channel.name}`);
-            const promptResult = await sendVerificationPrompt(channel, config);
-            console.log(`[Gateway] Prompt result:`, promptResult);
+        // Send verification prompt to the channel immediately if button or trigger method
+        if (method === 'button' || method === 'trigger') {
+          const guild = client.guilds.cache.get(guildId);
+          if (guild) {
+            const channel = guild.channels.cache.get(channelId);
+            if (channel) {
+              console.log(`[Gateway] Sending verification prompt to channel ${channel.name}`);
+              const promptResult = await sendVerificationPrompt(channel, config);
+              console.log(`[Gateway] Prompt result:`, promptResult);
+            } else {
+              console.warn(`[Gateway] Channel ${channelId} not found in guild ${guildId}`);
+            }
           } else {
-            console.warn(`[Gateway] Button channel ${buttonChannelId} not found in guild ${guildId}`);
+            console.warn(`[Gateway] Guild ${guildId} not found in client cache`);
           }
-        } else {
-          console.warn(`[Gateway] Guild ${guildId} not found in client cache`);
         }
 
         return { success: true, config };
@@ -232,34 +245,6 @@ export default function GatewayModule(client) {
         return { success: true, config };
       } catch (err) {
         console.error('[Gateway] Customize page error:', err);
-        return { success: false, error: err.message };
-      }
-    },
-
-    /**
-     * Customize trigger logic (trigger word and emoji)
-     */
-    async customizeLogicCommand(guildId, triggerWord, triggerEmoji = undefined) {
-      try {
-        const updateData = {};
-
-        if (triggerWord !== undefined && triggerWord !== null) {
-          updateData.triggerWord = triggerWord.trim();
-        }
-        if (triggerEmoji !== undefined && triggerEmoji !== null) {
-          updateData.triggerEmoji = triggerEmoji;
-        }
-
-        const config = await GatewayConfig.findOneAndUpdate(
-          { guildId },
-          updateData,
-          { new: true }
-        );
-
-        console.log(`[Gateway] Customize logic for guild ${guildId}:`, updateData);
-        return { success: true, config };
-      } catch (err) {
-        console.error('[Gateway] Customize logic error:', err);
         return { success: false, error: err.message };
       }
     },

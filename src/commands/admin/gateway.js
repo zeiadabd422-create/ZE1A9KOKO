@@ -1,6 +1,6 @@
 /**
- * Gateway Admin Command - Clean 3-Subcommand Structure
- * Consolidates setup, UI customization, and status display
+ * Gateway Admin Command - Simplified Single-Method Setup
+ * Simple Efficiency: One method per setup
  */
 
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
@@ -12,47 +12,41 @@ export default {
     .addSubcommand(subcommand =>
       subcommand
         .setName('setup')
-        .setDescription('Setup gateway verification with independent channels for each method')
+        .setDescription('Setup gateway verification: Choose one method (Button, Trigger, Slash, or Join)')
+        .addStringOption(option =>
+          option
+            .setName('method')
+            .setDescription('Verification method')
+            .setRequired(true)
+            .addChoices(
+              { name: 'Button', value: 'button' },
+              { name: 'Trigger Word', value: 'trigger' },
+              { name: 'Slash Command (/verify)', value: 'slash' },
+              { name: 'Join (automatic)', value: 'join' }
+            )
+        )
+        .addChannelOption(option =>
+          option
+            .setName('channel')
+            .setDescription('Channel for this verification method')
+            .setRequired(true)
+        )
         .addRoleOption(option =>
           option
-            .setName('verified_role')
+            .setName('role_to_give')
             .setDescription('Role to give verified users')
             .setRequired(true)
         )
         .addRoleOption(option =>
           option
-            .setName('unverified_role')
-            .setDescription('Penalty/unverified role to remove')
+            .setName('role_to_remove')
+            .setDescription('Unverified/penalty role to remove')
             .setRequired(true)
-        )
-        .addChannelOption(option =>
-          option
-            .setName('button_channel')
-            .setDescription('Channel where verification button is posted')
-            .setRequired(true)
-        )
-        .addChannelOption(option =>
-          option
-            .setName('trigger_channel')
-            .setDescription('Channel where trigger word verification is processed (optional)')
-            .setRequired(false)
-        )
-        .addChannelOption(option =>
-          option
-            .setName('slash_channel')
-            .setDescription('Channel where /verify slash command is allowed (optional)')
-            .setRequired(false)
         )
         .addStringOption(option =>
           option
             .setName('trigger_word')
-            .setDescription('Trigger word for message-based verification (optional)')
-            .setRequired(false)
-        )
-        .addStringOption(option =>
-          option
-            .setName('success_dm')
-            .setDescription('Custom DM message on successful verification')
+            .setDescription('Trigger word (required if method is Trigger)')
             .setRequired(false)
         )
     )
@@ -98,25 +92,48 @@ export default {
     )
     .addSubcommand(subcommand =>
       subcommand
-        .setName('customize_logic')
-        .setDescription('Customize trigger word and trigger emoji')
+        .setName('customize_ui')
+        .setDescription('Customize the visual appearance of verification responses')
         .addStringOption(option =>
           option
-            .setName('trigger_word')
-            .setDescription('Word/phrase that triggers verification')
+            .setName('page')
+            .setDescription('Which page to customize')
             .setRequired(true)
+            .addChoices(
+              { name: 'Success', value: 'success' },
+              { name: 'Already Verified', value: 'alreadyVerified' },
+              { name: 'Error', value: 'error' }
+            )
         )
         .addStringOption(option =>
           option
-            .setName('trigger_emoji')
-            .setDescription('Emoji to react with when trigger word is matched')
+            .setName('title')
+            .setDescription('Embed title for this page')
+            .setRequired(false)
+        )
+        .addStringOption(option =>
+          option
+            .setName('description')
+            .setDescription('Embed description for this page')
+            .setRequired(false)
+        )
+        .addStringOption(option =>
+          option
+            .setName('color')
+            .setDescription('Hex color code (e.g., #2ecc71)')
+            .setRequired(false)
+        )
+        .addStringOption(option =>
+          option
+            .setName('image_url')
+            .setDescription('Banner image URL for this page')
             .setRequired(false)
         )
     )
     .addSubcommand(subcommand =>
       subcommand
         .setName('status')
-        .setDescription('Display all gateway settings and active verification methods')
+        .setDescription('Display gateway configuration and active method')
     ),
 
   async execute(interaction) {
@@ -144,33 +161,40 @@ export default {
       const subcommand = options.getSubcommand();
 
       if (subcommand === 'setup') {
-        const verifiedRole = options.getRole('verified_role', true);
-        const unverifiedRole = options.getRole('unverified_role', true);
-        const buttonChannel = options.getChannel('button_channel', true);
-        const triggerChannel = options.getChannel('trigger_channel') || undefined;
-        const slashChannel = options.getChannel('slash_channel') || undefined;
+        const method = options.getString('method', true);
+        const channel = options.getChannel('channel', true);
+        const roleToGive = options.getRole('role_to_give', true);
+        const roleToRemove = options.getRole('role_to_remove', true);
         const triggerWord = options.getString('trigger_word') || '';
-        const successDM = options.getString('success_dm') || undefined;
+
+        // Validate trigger word if method is trigger
+        if (method === 'trigger' && !triggerWord?.trim()) {
+          await interaction.reply({
+            content: '❌ Trigger word is required when using Trigger method.',
+            ephemeral: true,
+          });
+          return;
+        }
 
         const result = await client.gateway.setupCommand(
           guild.id,
-          verifiedRole.id,
-          unverifiedRole.id,
-          buttonChannel.id,
-          triggerChannel?.id || '',
-          slashChannel?.id || '',
-          triggerWord,
-          successDM
+          method,
+          channel.id,
+          roleToGive.id,
+          roleToRemove.id,
+          triggerWord
         );
 
         if (result.success) {
-          const enabledMethods = ['✅ Button'];
-          if (triggerChannel) enabledMethods.push(`✅ Trigger (channel: <#${triggerChannel.id}>)`);
-          if (triggerWord) enabledMethods.push(`✅ with word: \`${triggerWord}\``);
-          if (slashChannel) enabledMethods.push(`✅ /verify Slash (channel: <#${slashChannel.id}>)`);
+          const methodNames = {
+            button: '🔘 Button',
+            trigger: '💬 Trigger Word',
+            slash: '⚡ Slash Command (/verify)',
+            join: '✨ Join (automatic)',
+          };
 
           await interaction.reply({
-            content: `✅ Gateway configured successfully!\n\n**Button Channel:** <#${buttonChannel.id}>\n**Verified Role:** <@&${verifiedRole.id}>\n**Unverified Role:** <@&${unverifiedRole.id}>\n\n**Enabled Methods:**\n${enabledMethods.join('\n')}`,
+            content: `✅ **Gateway configured successfully!**\n\n**Method:** ${methodNames[method]}\n**Channel:** <#${channel.id}>\n**Verified Role:** <@&${roleToGive.id}>\n**Unverified Role (to remove):** <@&${roleToRemove.id}>${triggerWord ? `\n**Trigger Word:** \`${triggerWord}\`` : ''}`,
             ephemeral: true,
           });
         } else {
@@ -212,31 +236,6 @@ export default {
             ephemeral: true,
           });
         }
-      } else if (subcommand === 'customize_logic') {
-        const triggerWord = options.getString('trigger_word', true);
-        const triggerEmoji = options.getString('trigger_emoji');
-
-        const result = await client.gateway.customizeLogicCommand(
-          guild.id,
-          triggerWord,
-          triggerEmoji
-        );
-
-        if (result.success) {
-          const updates = [];
-          updates.push(`**Trigger Word:** \`${triggerWord}\``);
-          if (triggerEmoji) updates.push(`**Trigger Emoji:** ${triggerEmoji}`);
-
-          await interaction.reply({
-            content: `✅ Trigger logic customization updated!\n\n${updates.join('\n')}`,
-            ephemeral: true,
-          });
-        } else {
-          await interaction.reply({
-            content: `❌ Update failed: ${result.error}`,
-            ephemeral: true,
-          });
-        }
       } else if (subcommand === 'status') {
         const GatewayConfig = (await import('../../modules/gateway/schema.js')).default;
         const config = await GatewayConfig.findOne({ guildId: guild.id });
@@ -253,22 +252,21 @@ export default {
         const embed = new EmbedBuilder()
           .setColor(0x5865f2)
           .setTitle('🔐 Gateway Verification Status')
-          .setDescription('Current configuration and active methods')
+          .setDescription('Current configuration of your verification method')
           .addFields(
-            { name: '� Button Channel', value: config.buttonChannelId ? `<#${config.buttonChannelId}>` : 'Not configured', inline: false },
-            { name: '💬 Trigger Channel', value: config.triggerChannelId ? `<#${config.triggerChannelId}>` : 'Not configured', inline: false },
-            { name: '⚡ Slash Channel', value: config.slashChannelId ? `<#${config.slashChannelId}>` : 'Not configured (allowed everywhere)', inline: false },
+            { name: '🔄 Active Method', value: config.method === 'button' ? '🔘 Button' : (config.method === 'trigger' ? '💬 Trigger Word' : (config.method === 'slash' ? '⚡ Slash Command (/verify)' : '✨ Join (automatic)')), inline: true },
+            { name: '📍 Channel', value: `<#${config.channel}>`, inline: true },
             { name: '✅ Verified Role', value: `<@&${config.verifiedRole}>`, inline: true },
-            { name: '❌ Unverified Role', value: `<@&${config.unverifiedRole}>`, inline: true },
-            { name: '🔄 Active Methods', value: [
-              '✅ **Button** (always active)',
-              config.triggerWord ? `✅ **Trigger** (word: \`${config.triggerWord}\`, emoji: ${config.triggerEmoji || '✅'})` : '⭕ Trigger (no word configured)',
-              config.slashChannelId ? `✅ **/verify** Slash (<#${config.slashChannelId}>)` : '✅ **/verify** Slash (allowed everywhere)'
-            ].join('\n'), inline: false },
-            { name: '🎨 Theme Color', value: config.theme?.color || '#2ecc71', inline: true },
-            { name: '🛡️ Raid Shield', value: config.raidMode ? `✅ Active (Min age: ${config.minAccountAge} days)` : '❌ Disabled', inline: false }
-          )
-          .setFooter({ text: 'Use /gateway customize_ui for page visuals, /gateway customize_logic for trigger settings' })
+            { name: '❌ Unverified Role', value: `<@&${config.unverifiedRole}>`, inline: true }
+          );
+
+        if (config.triggerWord) {
+          embed.addFields(
+            { name: '🔑 Trigger Word', value: `\`${config.triggerWord}\``, inline: true }
+          );
+        }
+
+        embed.setFooter({ text: 'Use /gateway customize_ui for custom colors and images' })
           .setTimestamp();
 
         await interaction.reply({
