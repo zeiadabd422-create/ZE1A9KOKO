@@ -92,46 +92,6 @@ export default {
     )
     .addSubcommand(subcommand =>
       subcommand
-        .setName('customize_ui')
-        .setDescription('Customize the visual appearance of verification responses')
-        .addStringOption(option =>
-          option
-            .setName('page')
-            .setDescription('Which page to customize')
-            .setRequired(true)
-            .addChoices(
-              { name: 'Success', value: 'success' },
-              { name: 'Already Verified', value: 'alreadyVerified' },
-              { name: 'Error', value: 'error' }
-            )
-        )
-        .addStringOption(option =>
-          option
-            .setName('title')
-            .setDescription('Embed title for this page')
-            .setRequired(false)
-        )
-        .addStringOption(option =>
-          option
-            .setName('description')
-            .setDescription('Embed description for this page')
-            .setRequired(false)
-        )
-        .addStringOption(option =>
-          option
-            .setName('color')
-            .setDescription('Hex color code (e.g., #2ecc71)')
-            .setRequired(false)
-        )
-        .addStringOption(option =>
-          option
-            .setName('image_url')
-            .setDescription('Banner image URL for this page')
-            .setRequired(false)
-        )
-    )
-    .addSubcommand(subcommand =>
-      subcommand
         .setName('status')
         .setDescription('Display gateway configuration and active method')
     ),
