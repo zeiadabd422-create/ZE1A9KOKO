@@ -23,6 +23,7 @@ export default function WelcomeModule(client) {
         const title = parsePlaceholders(embedConfig.title || '', member, guild);
         const description = parsePlaceholders(embedConfig.description || '', member, guild);
         const footerText = parsePlaceholders(embedConfig.footer_text || '', member, guild);
+        const authorName = parsePlaceholders(embedConfig.author_name || '', member, guild);
 
         const embed = {
           title: title || 'Welcome',
@@ -30,6 +31,11 @@ export default function WelcomeModule(client) {
           color: parseInt((embedConfig.color || '#4f3ff0').replace('#', ''), 16),
           footer: { text: footerText || 'Welcome' },
         };
+
+        // Add author if author_name is provided
+        if (authorName && authorName.trim()) {
+          embed.author = { name: authorName };
+        }
 
         // Add thumbnail if user avatar is available and toggle is enabled
         try {
@@ -180,7 +186,7 @@ export default function WelcomeModule(client) {
 
     /**
      * Handle button interactions for Mimu-style welcome/goodbye editing
-     * Buttons: [Edit Basic Info], [Edit Footer & Images]
+     * Buttons: [edit basic information], [edit author], [edit footer], [edit images]
      */
     async handleButtonInteraction(interaction) {
       try {
@@ -196,13 +202,13 @@ export default function WelcomeModule(client) {
           return;
         }
 
-        // Parse button ID: welcome_<embedType>_<editType>
-        // e.g., welcome_welcome_basic or welcome_goodbye_footer
+        // Parse button ID: welcome_<embedType>_<buttonType>
+        // e.g., welcome_welcome_basicinfo or welcome_goodbye_images
         const parts = interaction.customId.split('_');
         const embedType = parts[1]; // 'welcome' or 'goodbye'
-        const editType = parts[2]; // 'basic' or 'footer'
+        const buttonType = parts[2]; // 'basicinfo', 'author', 'footer', 'images'
 
-        if (!embedType || !editType) {
+        if (!embedType || !buttonType) {
           console.warn('[Welcome] Invalid button customId format:', interaction.customId);
           try {
             await interaction.reply({ content: '❌ Invalid button configuration.', ephemeral: true });
@@ -215,23 +221,24 @@ export default function WelcomeModule(client) {
         const embedKey = embedType === 'welcome' ? 'welcomeEmbed' : 'goodbyeEmbed';
         const embConfig = config[embedKey];
 
-        // Create modal based on edit type - Mimu style with text input fields
+        // Create modal based on button type - Mimu style with individual modals
         let modal;
 
-        if (editType === 'basic') {
+        if (buttonType === 'basicinfo') {
+          // Modal 1: Basic Information (Color / Title / Description)
           modal = {
-            custom_id: `welcome_modal_${embedType}_basic`,
-            title: `Edit ${embedType === 'welcome' ? 'Welcome' : 'Goodbye'} • Basic Info`,
+            custom_id: `welcome_modal_${embedType}_basicinfo`,
+            title: `Edit ${embedType === 'welcome' ? 'Welcome' : 'Goodbye'} • Basic Information`,
             components: [
               {
                 type: 1,
                 components: [
                   {
-                    type: 4, // Text input component
+                    type: 4,
                     custom_id: 'title',
                     label: 'Embed Title',
                     placeholder: 'Enter embed title',
-                    style: 1, // SHORT (single line)
+                    style: 1,
                     value: embConfig?.title || '',
                     required: true,
                     min_length: 1,
@@ -247,7 +254,7 @@ export default function WelcomeModule(client) {
                     custom_id: 'description',
                     label: 'Embed Description',
                     placeholder: 'Use {user}, {server}, {member_count} for placeholders',
-                    style: 2, // LONG (multi-line paragraph)
+                    style: 2,
                     value: embConfig?.description || '',
                     required: true,
                     min_length: 1,
@@ -273,11 +280,34 @@ export default function WelcomeModule(client) {
               },
             ],
           };
-        } else if (editType === 'footer') {
-          // Combined footer and images editor
+        } else if (buttonType === 'author') {
+          // Modal 2: Author (Author Name Field)
+          modal = {
+            custom_id: `welcome_modal_${embedType}_author`,
+            title: `Edit ${embedType === 'welcome' ? 'Welcome' : 'Goodbye'} • Author`,
+            components: [
+              {
+                type: 1,
+                components: [
+                  {
+                    type: 4,
+                    custom_id: 'author_name',
+                    label: 'Author Name',
+                    placeholder: 'Enter author/display name',
+                    style: 1,
+                    value: embConfig?.author_name || '',
+                    required: false,
+                    max_length: 256,
+                  },
+                ],
+              },
+            ],
+          };
+        } else if (buttonType === 'footer') {
+          // Modal 3: Footer (Footer Text Only)
           modal = {
             custom_id: `welcome_modal_${embedType}_footer`,
-            title: `Edit ${embedType === 'welcome' ? 'Welcome' : 'Goodbye'} • Footer & Images`,
+            title: `Edit ${embedType === 'welcome' ? 'Welcome' : 'Goodbye'} • Footer`,
             components: [
               {
                 type: 1,
@@ -294,6 +324,14 @@ export default function WelcomeModule(client) {
                   },
                 ],
               },
+            ],
+          };
+        } else if (buttonType === 'images') {
+          // Modal 4: Images (Image URL, Channel ID, Thumbnail Toggle)
+          modal = {
+            custom_id: `welcome_modal_${embedType}_images`,
+            title: `Edit ${embedType === 'welcome' ? 'Welcome' : 'Goodbye'} • Images`,
+            components: [
               {
                 type: 1,
                 components: [
@@ -325,12 +363,27 @@ export default function WelcomeModule(client) {
                   },
                 ],
               },
+              {
+                type: 1,
+                components: [
+                  {
+                    type: 4,
+                    custom_id: 'thumbnail_toggle',
+                    label: 'Show Member Avatar (Thumbnail)',
+                    placeholder: 'true or false',
+                    style: 1,
+                    value: embConfig?.thumbnail_toggle ? 'true' : 'false',
+                    required: false,
+                    max_length: 5,
+                  },
+                ],
+              },
             ],
           };
         } else {
-          console.warn('[Welcome] Unknown edit type:', editType);
+          console.warn('[Welcome] Unknown button type:', buttonType);
           try {
-            await interaction.reply({ content: '❌ Unknown edit type.', ephemeral: true });
+            await interaction.reply({ content: '❌ Unknown button type.', ephemeral: true });
           } catch (replyErr) {
             console.error('[Welcome] Failed to reply:', replyErr);
           }
@@ -364,18 +417,18 @@ export default function WelcomeModule(client) {
 
     /**
      * Handle modal submissions for embed editing (Mimu-style modals)
-     * Updates database and confirms changes
+     * Separate modals for: basicinfo, author, footer, images
      */
     async handleModalSubmit(interaction) {
       try {
         if (!interaction.customId.startsWith('welcome_modal_')) return;
 
-        // Parse modal ID: welcome_modal_<embedType>_<editType>
+        // Parse modal ID: welcome_modal_<embedType>_<modalType>
         const parts = interaction.customId.split('_');
         const embedType = parts[2]; // 'welcome' or 'goodbye'
-        const editType = parts[3]; // 'basic' or 'footer'
+        const modalType = parts[3]; // 'basicinfo', 'author', 'footer', 'images'
 
-        if (!embedType || !editType) {
+        if (!embedType || !modalType) {
           console.warn('[Welcome] Invalid modal customId format:', interaction.customId);
           try {
             await interaction.reply({ content: '❌ Invalid modal configuration.', ephemeral: true });
@@ -396,13 +449,14 @@ export default function WelcomeModule(client) {
           return;
         }
 
-        // Build update object based on edit type
+        // Build update object based on modal type
         const update = {};
         const embedKey = embedType === 'welcome' ? 'welcomeEmbed' : 'goodbyeEmbed';
+        let successMessage = 'Updated successfully!';
 
         try {
-          if (editType === 'basic') {
-            // Get values from modal inputs
+          if (modalType === 'basicinfo') {
+            // Modal: Basic Information (Title, Description, Color)
             const title = interaction.fields.getTextInputValue('title');
             const description = interaction.fields.getTextInputValue('description');
             const color = interaction.fields.getTextInputValue('color') || (embedType === 'welcome' ? '#4f3ff0' : '#ff4d4d');
@@ -420,10 +474,31 @@ export default function WelcomeModule(client) {
             update[`${embedKey}.title`] = title;
             update[`${embedKey}.description`] = description;
             update[`${embedKey}.color`] = color;
-          } else if (editType === 'footer') {
+            successMessage = `${embedType === 'welcome' ? 'Welcome' : 'Goodbye'} • Basic Information updated!`;
+
+          } else if (modalType === 'author') {
+            // Modal: Author (Author Name Field)
+            const authorName = interaction.fields.getTextInputValue('author_name');
+
+            if (!authorName || !authorName.trim()) {
+              update[`${embedKey}.author_name`] = '';
+            } else {
+              update[`${embedKey}.author_name`] = authorName;
+            }
+            successMessage = `${embedType === 'welcome' ? 'Welcome' : 'Goodbye'} • Author updated!`;
+
+          } else if (modalType === 'footer') {
+            // Modal: Footer (Footer Text Only)
             const footerText = interaction.fields.getTextInputValue('footer_text');
+
+            update[`${embedKey}.footer_text`] = footerText;
+            successMessage = `${embedType === 'welcome' ? 'Welcome' : 'Goodbye'} • Footer updated!`;
+
+          } else if (modalType === 'images') {
+            // Modal: Images (Image URL, Channel ID, Thumbnail Toggle)
             const imageUrl = interaction.fields.getTextInputValue('image_url');
             const channelId = interaction.fields.getTextInputValue('channel_id');
+            const thumbnailToggleStr = interaction.fields.getTextInputValue('thumbnail_toggle') || 'false';
 
             // Validate channel ID format (snowflake: 17-20 digits)
             if (channelId && !/^\d{17,20}$/.test(channelId)) {
@@ -449,9 +524,15 @@ export default function WelcomeModule(client) {
               }
             }
 
-            update[`${embedKey}.footer_text`] = footerText;
+            // Parse thumbnail toggle input (true/false, yes/no, 1/0, etc.)
+            const thumbnailToggle = thumbnailToggleStr.toLowerCase() === 'true' || 
+                                   thumbnailToggleStr.toLowerCase() === 'yes' || 
+                                   thumbnailToggleStr === '1';
+
             update[`${embedKey}.image_url`] = imageUrl;
             update[`${embedKey}.channel`] = channelId;
+            update[`${embedKey}.thumbnail_toggle`] = thumbnailToggle;
+            successMessage = `${embedType === 'welcome' ? 'Welcome' : 'Goodbye'} • Images updated!`;
           }
         } catch (fieldsErr) {
           console.error('[Welcome] Error extracting modal fields:', fieldsErr);
@@ -481,19 +562,16 @@ export default function WelcomeModule(client) {
           }
 
           // Send success response
-          const embedName = embedType === 'welcome' ? 'Welcome' : 'Goodbye';
-          const sectionName = editType === 'basic' ? 'Basic Information' : 'Footer & Images';
-          
           try {
             await interaction.reply({
-              content: `✅ ${embedName} • ${sectionName} updated successfully!`,
+              content: `✅ ${successMessage}`,
               ephemeral: true,
             });
           } catch (replyErr) {
             console.error('[Welcome] Failed to send success reply:', replyErr);
           }
           
-          console.log(`[Welcome] ✅ Updated ${embedKey} (${editType}) for guild ${interaction.guild.id}`);
+          console.log(`[Welcome] ✅ Updated ${embedKey} (${modalType}) for guild ${interaction.guild.id}`);
         } catch (updateErr) {
           console.error('[Welcome] Database update error:', updateErr);
           try {

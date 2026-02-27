@@ -147,37 +147,36 @@ New members will automatically receive the "${autoRole.name}" role on join. Gate
           const embed = new EmbedBuilder()
             .setColor(isWelcome ? 0x4f3ff0 : 0xff4d4d)
             .setTitle(`${isWelcome ? '👋 Edit Welcome' : '👋 Edit Goodbye'} Embed`)
-            .setDescription('Select what you\'d like to customize:')
-            .addFields(
-              {
-                name: '📝 Basic Info',
-                value: 'Title, Description, Color',
-                inline: true,
-              },
-              {
-                name: '🖼️ Footer & Images',
-                value: 'Footer text, Banner URL, Channel',
-                inline: true,
-              }
-            )
+            .setDescription('Choose what to customize:')
             .setFooter({ text: '💡 Tip: Use {user}, {server}, {member_count} placeholders in text' });
 
-          // Action row with two main buttons - Mimu style
-          const row = new ActionRowBuilder().addComponents(
+          // 4 separate buttons - Mimu style
+          const row1 = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
-              .setCustomId(`welcome_${embedType}_basic`)
-              .setLabel('✏️ Edit Basic Info')
-              .setStyle(ButtonStyle.Primary),
+              .setCustomId(`welcome_${embedType}_basicinfo`)
+              .setLabel('edit basic information (color / title / description)')
+              .setStyle(ButtonStyle.Primary)
+          );
+
+          const row2 = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`welcome_${embedType}_author`)
+              .setLabel('edit author')
+              .setStyle(ButtonStyle.Secondary),
             new ButtonBuilder()
               .setCustomId(`welcome_${embedType}_footer`)
-              .setLabel('🖼️ Edit Footer & Images')
+              .setLabel('edit footer')
+              .setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder()
+              .setCustomId(`welcome_${embedType}_images`)
+              .setLabel('edit images')
               .setStyle(ButtonStyle.Secondary)
           );
 
           try {
             await interaction.reply({
               embeds: [embed],
-              components: [row],
+              components: [row1, row2],
               ephemeral: true,
             });
           } catch (replyErr) {
