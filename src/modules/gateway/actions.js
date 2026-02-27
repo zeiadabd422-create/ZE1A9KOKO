@@ -85,13 +85,20 @@ export async function verifyMember(member, config, method) {
       return { success: false, message: 'Invalid member object' };
     }
 
-    // Check if member is already verified
+    // Gateway should only act when the member currently has the configured unverified role
+    if (!config.unverifiedRole) {
+      return { success: false, message: 'Unverified role not configured' };
+    }
+
+    const hasUnverified = member.roles.cache.has(config.unverifiedRole);
     const hasVerifiedRole = member.roles.cache.has(config.verifiedRole);
-    if (hasVerifiedRole) {
+
+    // If the member does not have the unverified role, do not run gateway flows
+    if (!hasUnverified) {
       return { 
         success: false, 
         message: config.alreadyVerifiedMsg || 'You are already verified in this server!',
-        alreadyVerified: true 
+        alreadyVerified: true,
       };
     }
 
@@ -108,7 +115,18 @@ export async function verifyMember(member, config, method) {
       }
     }
 
-    // Step 1: Add verified role
+    // Step 1: Remove unverified role (strict order enforcement)
+    try {
+      const unverifiedRole = member.guild.roles.cache.get(config.unverifiedRole);
+      if (unverifiedRole && member.roles.cache.has(config.unverifiedRole)) {
+        await member.roles.remove(config.unverifiedRole);
+      }
+    } catch (err) {
+      console.error('[Gateway] Failed to remove unverified role:', err.message);
+      // Non-fatal - continue to add verified role
+    }
+
+    // Step 2: Add verified role
     try {
       const verifiedRole = member.guild.roles.cache.get(config.verifiedRole);
       if (!verifiedRole) {
@@ -119,17 +137,6 @@ export async function verifyMember(member, config, method) {
       }
     } catch (err) {
       return { success: false, message: `Failed to add verified role: ${err.message}` };
-    }
-
-    // Step 2: Remove unverified role
-    try {
-      const unverifiedRole = member.guild.roles.cache.get(config.unverifiedRole);
-      if (unverifiedRole && member.roles.cache.has(config.unverifiedRole)) {
-        await member.roles.remove(config.unverifiedRole);
-      }
-    } catch (err) {
-      console.error('[Gateway] Failed to remove unverified role:', err.message);
-      // Non-fatal error
     }
 
     // Step 3: Send styled DM with Chic UI (robust error handling)

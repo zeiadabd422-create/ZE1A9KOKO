@@ -35,9 +35,7 @@ const GatewaySchema = new mongoose.Schema(
         enabled: { type: Boolean, default: false },
         channel: { type: String, default: '' },
       },
-      join: {
-        enabled: { type: Boolean, default: false },
-      },
+      // join method removed; onboarding handled by Welcome module
     },
 
     // Initial message customization per method (the prompt sent to channel)
@@ -57,11 +55,7 @@ const GatewaySchema = new mongoose.Schema(
         desc: { type: String, default: 'Use /verify to verify your account.' },
         image: { type: String, default: '' },
       },
-      join: {
-        title: { type: String, default: '🔐 Server Verification' },
-        desc: { type: String, default: 'Welcome! You will be verified automatically.' },
-        image: { type: String, default: '' },
-      },
+      // join initial message removed
     },
 
     // DM customization

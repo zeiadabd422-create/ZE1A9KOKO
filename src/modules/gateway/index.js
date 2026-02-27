@@ -145,30 +145,7 @@ export default function GatewayModule(client) {
       }
     },
 
-    /**
-     * Handle member join (join method) - concurrent with other methods
-     */
-    async handleMemberAdd(member) {
-      try {
-        const config = await GatewayConfig.findOne({ guildId: member.guild.id });
-        if (!config || !config.enabled || !config.methods?.join?.enabled) {
-          return;
-        }
-
-        console.log(`[Gateway] Join method triggered for ${member.user.tag}`);
-
-        const result = await verifyMember(member, config, 'join');
-        
-        if (result.success) {
-          console.log(`[Gateway] ${member.user.tag} auto-verified on join`);
-          // Join method doesn't send a message - it's silent
-        } else if (!result.alreadyVerified) {
-          console.log(`[Gateway] Join verification failed for ${member.user.tag}: ${result.message}`);
-        }
-      } catch (err) {
-        console.error('[Gateway] Member add handler error:', err);
-      }
-    },
+    // Note: join method removed. New Welcome module handles member joins and onboarding.
 
     /**
      * Setup a verification method (can add multiple methods)
@@ -203,8 +180,6 @@ export default function GatewayModule(client) {
         } else if (method === 'slash') {
           updateData[`methods.slash.enabled`] = true;
           updateData[`methods.slash.channel`] = channelId;
-        } else if (method === 'join') {
-          updateData[`methods.join.enabled`] = true;
         }
 
         const newConfig = await GatewayConfig.findOneAndUpdate(

@@ -8,36 +8,82 @@ export default {
       if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
         if (!command) return;
-        await command.execute(interaction);
+        try {
+          await command.execute(interaction);
+        } catch (cmdErr) {
+          console.error(`[Command: ${interaction.commandName}] Execution error:`, cmdErr);
+          try {
+            if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
+              await interaction.reply({ content: '❌ An error occurred executing the command.', ephemeral: true });
+            }
+          } catch (replyErr) {
+            console.error('[Slash Command] Failed to send error reply:', replyErr);
+          }
+        }
         return;
       }
 
-      // Route button interactions to Gateway module
+      // Route button interactions
       if (interaction.isButton()) {
-        if (client.gateway && typeof client.gateway.handleInteraction === 'function') {
-          try {
+        try {
+          // Check if Welcome module handles this button
+          if (interaction.customId.startsWith('welcome_') && client.welcome && typeof client.welcome.handleButtonInteraction === 'function') {
+            await client.welcome.handleButtonInteraction(interaction);
+            return;
+          }
+
+          // Check if Gateway module handles this button
+          if (client.gateway && typeof client.gateway.handleInteraction === 'function') {
             await client.gateway.handleInteraction(interaction);
             return;
-          } catch (err) {
-            console.error('[Gateway] Button interaction error:', err);
+          }
+        } catch (err) {
+          console.error('[Button Interaction] Error:', err);
+          try {
             if (interaction.isRepliable() && !interaction.replied) {
-              await interaction.reply({ content: 'An error occurred.', ephemeral: true });
+              await interaction.reply({ content: '❌ An error occurred processing your interaction.', ephemeral: true });
             }
+          } catch (replyErr) {
+            console.error('[Button] Failed to send error reply:', replyErr);
           }
         }
       }
 
-      // Route select menu interactions to modules if present
-      if (interaction.isSelectMenu()) {
-        if (client.gateway && typeof client.gateway.handleInteraction === 'function') {
+      // Route modal interactions
+      if (interaction.isModalSubmit()) {
+        try {
+          // Check if Welcome module handles this modal
+          if (interaction.customId.startsWith('welcome_modal_') && client.welcome && typeof client.welcome.handleModalSubmit === 'function') {
+            await client.welcome.handleModalSubmit(interaction);
+            return;
+          }
+        } catch (err) {
+          console.error('[Modal Interaction] Error:', err);
           try {
+            if (interaction.isRepliable() && !interaction.replied) {
+              await interaction.reply({ content: '❌ Failed to process your submission.', ephemeral: true });
+            }
+          } catch (replyErr) {
+            console.error('[Modal] Failed to send error reply:', replyErr);
+          }
+        }
+      }
+
+      // Route select menu interactions
+      if (interaction.isSelectMenu()) {
+        try {
+          if (client.gateway && typeof client.gateway.handleInteraction === 'function') {
             await client.gateway.handleInteraction(interaction);
             return;
-          } catch (err) {
-            console.error('[Gateway] Select menu interaction error:', err);
+          }
+        } catch (err) {
+          console.error('[Select Menu] Error:', err);
+          try {
             if (interaction.isRepliable() && !interaction.replied) {
-              await interaction.reply({ content: 'An error occurred.', ephemeral: true });
+              await interaction.reply({ content: '❌ An error occurred.', ephemeral: true });
             }
+          } catch (replyErr) {
+            console.error('[Select Menu] Failed to send error reply:', replyErr);
           }
         }
       }
@@ -45,10 +91,10 @@ export default {
       console.error('[interactionCreate] Handler failed:', err);
       try {
         if (interaction && interaction.isRepliable && interaction.isRepliable() && !interaction.replied) {
-          await interaction.reply({ content: 'Internal error.', ephemeral: true });
+          await interaction.reply({ content: '❌ Internal error.', ephemeral: true });
         }
       } catch (e) {
-        // swallow
+        console.error('[interactionCreate] Failed to send final error reply:', e);
       }
     }
   },

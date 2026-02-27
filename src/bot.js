@@ -4,7 +4,6 @@ import loadCommands from './loaders/commands.js';
 import loadModules from './loaders/modules.js';
 import { connectDatabase } from './core/database.js';
 import { logger } from './core/logger.js';
-import gatewayModule from './modules/gateway/index.js';
 
 export const client = new Client({
     intents: [
@@ -21,21 +20,18 @@ export async function startBot() {
     try {
         logger.info('Starting Guardian Bot v4.0 - Full System Purge & Modular Refactor');
 
-        // Startup Sequence: Database -> Cache Init -> Events -> Commands -> Modules -> Client Login
+        // Startup Sequence: Database -> Events -> Commands -> Modules -> Client Login
         
         logger.info('Step 1: Connecting to database...');
         await connectDatabase();
 
-        logger.info('Step 2: Initializing Gateway Module cache...');
-        await gatewayModule.init(client);
-
-        logger.info('Step 3: Loading events...');
+        logger.info('Step 2: Loading events...');
         await loadEvents(client);
 
-        logger.info('Step 4: Loading and syncing commands...');
+        logger.info('Step 3: Loading and syncing commands...');
         await loadCommands(client);
 
-        logger.info('Step 5: Loading modules...');
+        logger.info('Step 4: Loading modules...');
         await loadModules(client);
 
         // Initialize security modules
@@ -52,7 +48,7 @@ export async function startBot() {
             logger.warn(`Failed to initialize webhookGuard: ${err.message}`);
         }
 
-        logger.info('Step 6: Logging in to Discord...');
+        logger.info('Step 5: Logging in to Discord...');
         const token = process.env.DISCORD_TOKEN;
         if (!token) {
             throw new Error('DISCORD_TOKEN not found in environment variables');

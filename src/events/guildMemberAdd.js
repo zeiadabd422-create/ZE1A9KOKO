@@ -4,15 +4,17 @@ export default {
     try {
       const { client } = member;
 
-      // Forward member join to gateway handler if present
-      if (client && client.gateway && typeof client.gateway.handleMemberAdd === 'function') {
+      // Forward member join to welcome handler if present
+      if (client && client.welcome && typeof client.welcome.handleMemberAdd === 'function') {
         try {
           console.log(`[GuildMemberAdd] New member: ${member.user.tag}`);
-          await client.gateway.handleMemberAdd(member);
+          await client.welcome.handleMemberAdd(member);
         } catch (err) {
-          console.error('[Gateway] Member add handler error:', err);
+          console.error('[Welcome] Member add handler error:', err);
         }
+        return;
       }
+      // fallback: previously gateway handled joins; no-op now to avoid duplicate handling
     } catch (err) {
       console.error('[guildMemberAdd] Handler failed:', err);
     }

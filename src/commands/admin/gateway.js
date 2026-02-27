@@ -8,7 +8,7 @@ import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 export default {
   data: new SlashCommandBuilder()
     .setName('gateway')
-    .setDescription('Configure and manage gateway verification (supports all methods simultaneously)')
+    .setDescription('Configure and manage gateway verification (supports button, trigger, slash)')
     .addSubcommand(subcommand =>
       subcommand
         .setName('setup')
@@ -21,8 +21,7 @@ export default {
             .addChoices(
               { name: 'Button', value: 'button' },
               { name: 'Trigger Word', value: 'trigger' },
-              { name: 'Slash Command (/verify)', value: 'slash' },
-              { name: 'Join (automatic)', value: 'join' }
+              { name: 'Slash Command (/verify)', value: 'slash' }
             )
         )
         .addChannelOption(option =>
@@ -75,7 +74,7 @@ export default {
         )
         .addStringOption(option =>
           option
-            .setName('description')
+            .setName('desc')
             .setDescription('Embed description')
             .setRequired(false)
         )
@@ -104,8 +103,7 @@ export default {
             .addChoices(
               { name: 'Button', value: 'button' },
               { name: 'Trigger Word', value: 'trigger' },
-              { name: 'Slash Command', value: 'slash' },
-              { name: 'Join', value: 'join' }
+              { name: 'Slash Command', value: 'slash' }
             )
         )
         .addStringOption(option =>
@@ -156,8 +154,8 @@ export default {
         const verifiedRole = options.getRole('verified_role');
         const unverifiedRole = options.getRole('unverified_role');
 
-        // Validate: join method doesn't need a channel
-        if (method !== 'join' && !channel) {
+        // Validate: methods other than 'join' require a channel
+        if (!channel) {
           await interaction.reply({
             content: `❌ Channel is required for ${method} method.`,
             ephemeral: true,
@@ -209,7 +207,7 @@ export default {
       } else if (subcommand === 'customize_ui') {
         const page = options.getString('page', true);
         const title = options.getString('title');
-        const description = options.getString('description');
+        const description = options.getString('desc');
         const color = options.getString('color');
         const imageUrl = options.getString('image_url');
 
