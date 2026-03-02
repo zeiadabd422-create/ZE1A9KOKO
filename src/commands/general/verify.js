@@ -46,13 +46,13 @@ export default {
       const result = await verifyMember(member, config, 'slash');
 
       if (result.alreadyVerified) {
-        const embed = createEmbed(config, result.message, 'alreadyVerified');
+        const embed = await createEmbed(config, result.message, 'alreadyVerified', member);
         await interaction.reply({
           embeds: [embed],
           ephemeral: false,
         });
       } else if (result.success) {
-        const embed = createEmbed(config, '✅ Verification successful! Welcome to the server.', 'success');
+        const embed = await createEmbed(config, '✅ Verification successful! Welcome to the server.', 'success', member);
         // Slash success in correct channel is PUBLIC
         await interaction.reply({
           embeds: [embed],

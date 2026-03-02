@@ -94,17 +94,41 @@ export default {
     .addSubcommand(subcommand =>
       subcommand
         .setName('customize_logic')
-        .setDescription('Configure method-specific settings (initial message text)')
+        .setDescription('Configure or tweak verification logic and roles')
         .addStringOption(option =>
           option
             .setName('method')
-            .setDescription('Which method to customize prompts for')
+            .setDescription('Which method to customize prompts for or update settings on')
             .setRequired(true)
             .addChoices(
               { name: 'Button', value: 'button' },
               { name: 'Trigger Word', value: 'trigger' },
               { name: 'Slash Command', value: 'slash' }
             )
+        )
+        .addChannelOption(option =>
+          option
+            .setName('channel')
+            .setDescription('Change the channel associated with this method')
+            .setRequired(false)
+        )
+        .addStringOption(option =>
+          option
+            .setName('trigger_word')
+            .setDescription('Trigger word (only for trigger method)')
+            .setRequired(false)
+        )
+        .addRoleOption(option =>
+          option
+            .setName('verified_role')
+            .setDescription('Verified role to assign')
+            .setRequired(false)
+        )
+        .addRoleOption(option =>
+          option
+            .setName('unverified_role')
+            .setDescription('Unverified role to remove')
+            .setRequired(false)
         )
         .addStringOption(option =>
           option
@@ -239,31 +263,66 @@ export default {
         }
       } else if (subcommand === 'customize_logic') {
         const method = options.getString('method', true);
+        const channelOpt = options.getChannel('channel');
+        const triggerWord = options.getString('trigger_word');
+        const verifiedRole = options.getRole('verified_role');
+        const unverifiedRole = options.getRole('unverified_role');
         const promptTitle = options.getString('prompt_title');
         const promptDesc = options.getString('prompt_description');
 
-        const result = await client.gateway.customizeInitialMessageCommand(
-          guild.id,
-          method,
-          promptTitle,
-          promptDesc
-        );
+        const replyParts = [];
+        let overallSuccess = true;
 
-        if (result.success) {
-          const updates = [];
-          if (promptTitle) updates.push(`**Prompt Title:** ${promptTitle}`);
-          if (promptDesc) updates.push(`**Prompt Description:** ${promptDesc}`);
-
-          await interaction.reply({
-            content: `✅ **${method}** method prompt customized!\n\n${updates.join('\n') || 'No changes made.'}`,
-            ephemeral: true,
-          });
-        } else {
-          await interaction.reply({
-            content: `❌ Update failed: ${result.error}`,
-            ephemeral: true,
-          });
+        // if any logic-related options were provided, update via setupMethod
+        if (channelOpt || triggerWord || verifiedRole || unverifiedRole) {
+          const res1 = await client.gateway.setupMethod(
+            guild.id,
+            method,
+            channelOpt?.id || '',
+            triggerWord || '',
+            verifiedRole?.id,
+            unverifiedRole?.id
+          );
+          if (res1.success) {
+            const details = [];
+            if (channelOpt) details.push(`Channel → <#${channelOpt.id}>`);
+            if (triggerWord) details.push(`Trigger Word → \\`${triggerWord}\\``);
+            if (verifiedRole) details.push(`Verified Role → <@&${verifiedRole.id}>`);
+            if (unverifiedRole) details.push(`Unverified Role → <@&${unverifiedRole.id}>`);
+            replyParts.push(`⚙️ Logic updated: ${details.join(', ')}`);
+          } else {
+            overallSuccess = false;
+            replyParts.push(`❌ Logic update failed: ${res1.error}`);
+          }
         }
+
+        // prompts customization
+        if (promptTitle || promptDesc) {
+          const res2 = await client.gateway.customizeInitialMessageCommand(
+            guild.id,
+            method,
+            promptTitle,
+            promptDesc
+          );
+          if (res2.success) {
+            const upd = [];
+            if (promptTitle) upd.push(`Title → ${promptTitle}`);
+            if (promptDesc) upd.push(`Description → ${promptDesc}`);
+            replyParts.push(`✏️ Prompt updated (${upd.join(', ')})`);
+          } else {
+            overallSuccess = false;
+            replyParts.push(`❌ Prompt update failed: ${res2.error}`);
+          }
+        }
+
+        if (replyParts.length === 0) {
+          replyParts.push('No options provided; nothing to change.');
+        }
+
+        await interaction.reply({
+          content: `${overallSuccess ? '✅' : '⚠️'} ${replyParts.join('\n')}`,
+          ephemeral: true,
+        });
       } else if (subcommand === 'status') {
         const GatewayConfig = (await import('../../modules/gateway/schema.js')).default;
         const config = await GatewayConfig.findOne({ guildId: guild.id });
@@ -304,6 +363,20 @@ export default {
           { name: '✅ Verified Role', value: `<@&${config.verifiedRole}>`, inline: true },
           { name: '❌ Unverified Role', value: `<@&${config.unverifiedRole}>`, inline: true }
         );
+        
+        // show configured initial prompts if available
+        const promptLines = [];
+        if (config.initialMessage) {
+          ['button', 'trigger', 'slash'].forEach(m => {
+            const im = config.initialMessage[m] || {};
+            if (im.title || im.desc) {
+              promptLines.push(`**${m}**: ${im.title || '<no title>'}`);
+            }
+          });
+        }
+        if (promptLines.length > 0) {
+          embed.addFields({ name: '✉️ Custom Prompts', value: promptLines.join('\n'), inline: false });
+        }
 
         embed.setFooter({ text: 'Use /gateway setup to add methods, /gateway customize_ui to style responses' })
           .setTimestamp();

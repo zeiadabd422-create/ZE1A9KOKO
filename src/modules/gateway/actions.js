@@ -5,6 +5,11 @@
 
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { validateRaidShield, getAccountAgeDays } from './checker.js';
+import { parsePlaceholders } from '../../utils/placeholders.js';
+import EmbedEngine from '../../utils/embedEngine.js';
+
+// engine with bounded cache so we don't hold onto forever-growing embed objects
+const embedEngine = new EmbedEngine(100);
 
 /**
  * Create a styled embed with custom config
@@ -19,57 +24,73 @@ import { validateRaidShield, getAccountAgeDays } from './checker.js';
  * @param {string} overrideMessage - Optional message to use for description
  * @param {string} pageKey - 'success' | 'alreadyVerified' | 'error' | 'dm' | 'prompt' | undefined
  */
-export function createEmbed(config, overrideMessage = '', pageKey = '') {
-  let page = {};
-  
-  // Select page object based on pageKey
-  if (pageKey === 'success') page = config.successUI || {};
-  else if (pageKey === 'alreadyVerified') page = config.alreadyVerifiedUI || {};
-  else if (pageKey === 'error') page = config.errorUI || {};
-  else if (pageKey === 'dm') page = config.dmUI || {};
-  else if (pageKey === 'prompt') page = config.promptUI || {};
+export async function createEmbed(config, overrideMessage = '', pageKey = '', member = null) {
+  // build a cache key so identical requests don't require reconstruction
+  const gid = config.guildId || config.guild || ''; // may be undefined on some calls
+  const cacheKey = `${gid}:${pageKey}:${overrideMessage}`;
 
-  // Default fallback values per page type
-  let defaultTitle = '🔐 Server Verification';
-  let defaultDesc = 'Verification processed.';
-  let defaultColor = '#2ecc71';
+  return embedEngine.cached(cacheKey, async () => {
+    let page = {};
+    
+    // Select page object based on pageKey
+    if (pageKey === 'success') page = config.successUI || {};
+    else if (pageKey === 'alreadyVerified') page = config.alreadyVerifiedUI || {};
+    else if (pageKey === 'error') page = config.errorUI || {};
+    else if (pageKey === 'dm') page = config.dmUI || {};
+    else if (pageKey === 'prompt') page = config.promptUI || {};
 
-  if (pageKey === 'success') {
-    defaultTitle = '✅ Success';
-    defaultDesc = 'You have been verified! Welcome to the server.';
-    defaultColor = '#2ecc71';
-  } else if (pageKey === 'alreadyVerified') {
-    defaultTitle = '⏭️ Already Verified';
-    defaultDesc = 'You are already verified in this server!';
-    defaultColor = '#ffa500';
-  } else if (pageKey === 'error') {
-    defaultTitle = '❌ Error';
-    defaultDesc = 'Verification failed.';
-    defaultColor = '#ff0000';
-  } else if (pageKey === 'dm') {
-    defaultTitle = '✅ Welcome';
-    defaultDesc = 'You have been verified! Welcome to the server.';
-    defaultColor = '#2ecc71';
-  }
+    // Default fallback values per page type
+    let defaultTitle = '🔐 Server Verification';
+    let defaultDesc = 'Verification processed.';
+    let defaultColor = '#2ecc71';
 
-  const title = page.title || defaultTitle;
-  const description = overrideMessage || page.desc || defaultDesc;
-  const colorHex = page.color || defaultColor;
-  const color = parseInt((colorHex || '#2ecc71').replace('#', ''), 16);
+    if (pageKey === 'success') {
+      defaultTitle = '✅ Success';
+      defaultDesc = 'You have been verified! Welcome to the server.';
+      defaultColor = '#2ecc71';
+    } else if (pageKey === 'alreadyVerified') {
+      defaultTitle = '⏭️ Already Verified';
+      defaultDesc = 'You are already verified in this server!';
+      defaultColor = '#ffa500';
+    } else if (pageKey === 'error') {
+      defaultTitle = '❌ Error';
+      defaultDesc = 'Verification failed.';
+      defaultColor = '#ff0000';
+    } else if (pageKey === 'dm') {
+      defaultTitle = '✅ Welcome';
+      defaultDesc = 'You have been verified! Welcome to the server.';
+      defaultColor = '#2ecc71';
+    }
 
-  const embed = {
-    title,
-    description,
-    color,
-    footer: { text: 'Guardian Bot v4.0' },
-  };
+    let title = page.title || defaultTitle;
+    let description = overrideMessage || page.desc || defaultDesc;
+    const colorHex = page.color || defaultColor;
+    const color = parseInt((colorHex || '#2ecc71').replace('#', ''), 16);
 
-  const imageUrl = page.image || '';
-  if (imageUrl && imageUrl.trim()) {
-    embed.image = { url: imageUrl };
-  }
+    // placeholder parsing if a member/guild context was provided
+    if (member) {
+      try {
+        title = await parsePlaceholders(title, member);
+        description = await parsePlaceholders(description, member);
+      } catch (e) {
+        console.warn('[Gateway] Placeholder parsing error:', e.message);
+      }
+    }
 
-  return embed;
+    const embed = {
+      title,
+      description,
+      color,
+      footer: { text: 'Guardian Bot v4.0' },
+    };
+
+    const imageUrl = page.image || '';
+    if (imageUrl && imageUrl.trim()) {
+      embed.image = { url: imageUrl };
+    }
+
+    return embed;
+  });
 }
 
 /**
@@ -115,18 +136,8 @@ export async function verifyMember(member, config, method) {
       }
     }
 
-    // Step 1: Remove unverified role (strict order enforcement)
-    try {
-      const unverifiedRole = member.guild.roles.cache.get(config.unverifiedRole);
-      if (unverifiedRole && member.roles.cache.has(config.unverifiedRole)) {
-        await member.roles.remove(config.unverifiedRole);
-      }
-    } catch (err) {
-      console.error('[Gateway] Failed to remove unverified role:', err.message);
-      // Non-fatal - continue to add verified role
-    }
-
-    // Step 2: Add verified role
+    // Step 1: Add verified role first (ensures user ends up with the correct role even
+    // if removal of the unverified role fails)
     try {
       const verifiedRole = member.guild.roles.cache.get(config.verifiedRole);
       if (!verifiedRole) {
@@ -139,10 +150,21 @@ export async function verifyMember(member, config, method) {
       return { success: false, message: `Failed to add verified role: ${err.message}` };
     }
 
+    // Step 2: Remove unverified role after successful addition
+    try {
+      const unverifiedRole = member.guild.roles.cache.get(config.unverifiedRole);
+      if (unverifiedRole && member.roles.cache.has(config.unverifiedRole)) {
+        await member.roles.remove(config.unverifiedRole);
+      }
+    } catch (err) {
+      console.error('[Gateway] Failed to remove unverified role:', err.message);
+      // non-fatal
+    }
+
     // Step 3: Send styled DM with Chic UI (robust error handling)
     let dmFailed = false;
     try {
-      const dmEmbed = createEmbed(config, '', 'dm');
+      const dmEmbed = await createEmbed(config, '', 'dm', member);
 
       let user = member && member.user ? member.user : null;
       if (!user && member && member.client) {
@@ -190,13 +212,13 @@ export async function verifyMember(member, config, method) {
  * @param {string} message - Message to display
  * @returns {Object} { success: boolean, message: string }
  */
-export async function sendChannelEmbed(channel, config, message) {
+export async function sendChannelEmbed(channel, config, message, member = null) {
   try {
     if (!channel || !channel.send) {
       return { success: false, message: 'Invalid channel' };
     }
 
-    const embed = createEmbed(config, message);
+    const embed = await createEmbed(config, message, '', member);
     await channel.send({ embeds: [embed] });
     return { success: true, message: 'Embed sent' };
   } catch (err) {
@@ -226,6 +248,15 @@ export async function sendVerificationPrompt(channel, config, method) {
     // For prompt customization override
     if (config.promptUI?.title) title = config.promptUI.title;
     if (config.promptUI?.desc) desc = config.promptUI.desc;
+
+    // parse placeholders using guild context only (no specific member yet)
+    try {
+      const fakeMember = { guild: channel.guild };
+      title = await parsePlaceholders(title, fakeMember);
+      desc = await parsePlaceholders(desc, fakeMember);
+    } catch (e) {
+      // ignore placeholder errors
+    }
 
     const embed = {
       title,

@@ -37,11 +37,11 @@ export default function GatewayModule(client) {
           const result = await verifyMember(interaction.member, config, 'button');
 
           if (result.alreadyVerified) {
-            const embed = createEmbed(config, result.message, 'alreadyVerified');
+            const embed = await createEmbed(config, result.message, 'alreadyVerified', interaction.member);
             // Button success is EPHEMERAL (private)
             await interaction.reply({ embeds: [embed], ephemeral: true });
           } else if (result.success) {
-            const embed = createEmbed(config, '✅ Verification successful! Welcome to the server.', 'success');
+            const embed = await createEmbed(config, '✅ Verification successful! Welcome to the server.', 'success', interaction.member);
             // Button success is EPHEMERAL (private)
             await interaction.reply({ embeds: [embed], ephemeral: true });
             
@@ -114,7 +114,7 @@ export default function GatewayModule(client) {
             try {
               const pageKey = result.alreadyVerified ? 'alreadyVerified' : 'success';
               const msg = result.alreadyVerified ? (result.message || '') : '✅ Verification successful! Welcome to the server.';
-              const channelEmbed = createEmbed(config, msg, pageKey);
+              const channelEmbed = await createEmbed(config, msg, pageKey, message.member);
               // Trigger success is PUBLIC
               await message.channel.send({ embeds: [channelEmbed] });
             } catch (sendErr) {
@@ -132,7 +132,7 @@ export default function GatewayModule(client) {
             }
           } else {
             try {
-              const errEmbed = createEmbed(config, result.message || 'Verification failed.', 'error');
+              const errEmbed = await createEmbed(config, result.message || 'Verification failed.', 'error', message.member);
               // Error is PUBLIC
               await message.channel.send({ embeds: [errEmbed] });
             } catch (errSend) {

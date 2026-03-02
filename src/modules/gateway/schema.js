@@ -58,7 +58,7 @@ const GatewaySchema = new mongoose.Schema(
       // join initial message removed
     },
 
-    // DM customization
+    // Legacy UI customization fields (will be superseded by templates)
     dmUI: {
       title: { type: String, default: '✅ Welcome' },
       desc: { type: String, default: 'You have been verified! Welcome to the server.' },
@@ -66,7 +66,6 @@ const GatewaySchema = new mongoose.Schema(
       image: { type: String, default: '' },
     },
 
-    // Prompt/Initial Message customization (overrides initialMessage)
     promptUI: {
       title: { type: String, default: '' },
       desc: { type: String, default: '' },
@@ -74,7 +73,6 @@ const GatewaySchema = new mongoose.Schema(
       image: { type: String, default: '' },
     },
 
-    // Response page customization
     successUI: {
       title: { type: String, default: '✅ Success' },
       desc: { type: String, default: 'Verification successful! Welcome to the server.' },
@@ -92,6 +90,46 @@ const GatewaySchema = new mongoose.Schema(
       desc: { type: String, default: 'Verification failed.' },
       color: { type: String, default: '#ff0000' },
       image: { type: String, default: '' },
+    },
+
+    // New templates array for flexible embed configurations
+    templates: {
+      type: [
+        {
+          name: { type: String, required: true },
+          title: { type: String, default: '' },
+          description: { type: String, default: '' },
+          color: { type: String, default: '' },
+          author: { type: String, default: '' },
+          footer: { type: String, default: '' },
+          images: { type: [String], default: [] },
+          buttons: {
+            type: [
+              {
+                label: String,
+                style: String,
+                customId: String,
+                url: String,
+              },
+            ],
+            default: [],
+          },
+        },
+      ],
+      default: [],
+      description: 'Array of named embed templates that can be referenced in the gateway flows',
+    },
+
+    // Track explicit verification state for users
+    verifiedUsers: {
+      type: [
+        {
+          userId: { type: String, required: true },
+          verifiedAt: { type: Date, default: Date.now },
+        },
+      ],
+      default: [],
+      description: 'Historical log of users who have passed verification',
     },
 
     // Core settings
