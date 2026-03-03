@@ -120,7 +120,26 @@ const GatewaySchema = new mongoose.Schema(
       description: 'Array of named embed templates that can be referenced in the gateway flows',
     },
 
-    // Track explicit verification state for users
+    // Track explicit per-user state with verification details and temporary roles
+    userStates: {
+      type: Map,
+      of: new mongoose.Schema(
+        {
+          inviterId: { type: String, default: '' },
+          invitesCount: { type: Number, default: 0 },
+          verificationTimestamp: { type: Date, default: null },
+          tempRoles: [
+            {
+              roleId: { type: String },
+              expiresAt: { type: Date },
+            },
+          ],
+        },
+        { _id: false }
+      ),
+      default: {},
+      description: 'Map of userId -> state object tracking inviter, invites, verification and temporary roles',
+    },
 
     // Core settings
     enabled: {

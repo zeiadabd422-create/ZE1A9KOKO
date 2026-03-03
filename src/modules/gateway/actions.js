@@ -7,9 +7,9 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { validateRaidShield, getAccountAgeDays } from './checker.js';
 import { parsePlaceholders } from '../../utils/placeholders.js';
 import { parseColor } from '../../utils/parseColor.js';
-import EmbedEngine from '../../utils/embedEngine.js';
+import EmbedEngine from '../../utils/EmbedEngine.js';
 
-// engine with bounded cache so we don't hold onto forever-growing embed objects
+// engine used for converting JSON configs to embed objects, with built-in cache
 const embedEngine = new EmbedEngine(100);
 
 // simple guard to avoid processing the same user concurrently (e.g. button spam)
@@ -48,68 +48,8 @@ export async function createEmbed(config, overrideMessage = '', pageKey = '', me
   const gid = config.guildId || config.guild || ''; // may be undefined on some calls
   const cacheKey = `${gid}:${pageKey}:${overrideMessage}`;
 
-  return embedEngine.cached(cacheKey, async () => {
-    let page = {};
-    
-    // Select page object based on pageKey
-    if (pageKey === 'success') page = config.successUI || {};
-    else if (pageKey === 'alreadyVerified') page = config.alreadyVerifiedUI || {};
-    else if (pageKey === 'error') page = config.errorUI || {};
-    else if (pageKey === 'dm') page = config.dmUI || {};
-    else if (pageKey === 'prompt') page = config.promptUI || {};
-
-    // Default fallback values per page type
-    let defaultTitle = '🔐 Server Verification';
-    let defaultDesc = 'Verification processed.';
-    let defaultColor = '#2ecc71';
-
-    if (pageKey === 'success') {
-      defaultTitle = '✅ Success';
-      defaultDesc = 'You have been verified! Welcome to the server.';
-      defaultColor = '#2ecc71';
-    } else if (pageKey === 'alreadyVerified') {
-      defaultTitle = '⏭️ Already Verified';
-      defaultDesc = 'You are already verified in this server!';
-      defaultColor = '#ffa500';
-    } else if (pageKey === 'error') {
-      defaultTitle = '❌ Error';
-      defaultDesc = 'Verification failed.';
-      defaultColor = '#ff0000';
-    } else if (pageKey === 'dm') {
-      defaultTitle = '✅ Welcome';
-      defaultDesc = 'You have been verified! Welcome to the server.';
-      defaultColor = '#2ecc71';
-    }
-
-    let title = page.title || defaultTitle;
-    let description = overrideMessage || page.desc || defaultDesc;
-    const colorHex = page.color || defaultColor;
-    const color = parseColor(colorHex, defaultColor);
-
-    // placeholder parsing if a member/guild context was provided
-    if (member) {
-      try {
-        title = await parsePlaceholders(title, member);
-        description = await parsePlaceholders(description, member);
-      } catch (e) {
-        console.warn('[Gateway] Placeholder parsing error:', e.message);
-      }
-    }
-
-    const embed = {
-      title,
-      description,
-      color,
-      footer: { text: 'Guardian Bot v4.0' },
-    };
-
-    const imageUrl = page.image || '';
-    if (imageUrl && imageUrl.trim()) {
-      embed.image = { url: imageUrl };
-    }
-
-    return embed;
-  });
+  // delegate to engine and utilize its caching
+  return embedEngine.cached(cacheKey, () => embedEngine.build(config, overrideMessage, pageKey, member));
 }
 
 /**

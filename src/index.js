@@ -7,8 +7,16 @@ import loadCommands from "./loaders/commands.js";
 
 dotenv.config();
 
+// environment validation - critical variables must be present before bot starts
+if (!process.env.CLIENT_ID || !process.env.GUILD_ID) {
+  console.error('Error: CLIENT_ID and GUILD_ID must be set in environment variables');
+  process.exit(1);
+}
+
 // global safety: log unhandled promise rejections
 process.on('unhandledRejection', (reason) => console.error('Unhandled Rejection:', reason));
+// also capture uncaught exceptions so the process doesn't silently die
+process.on('uncaughtException', (err) => console.error('Uncaught Exception:', err));
 
 const client = new Client({
       intents: [
@@ -30,8 +38,12 @@ const client = new Client({
 
 client.commands = new Collection();
 
+import scheduler from './core/TaskScheduler.js';
+
 async function bootstrap() {
       await connectDatabase();
+      // kick off background tasks such as temp-role cleanup
+      scheduler.start();
         await loadModules(client);
           await loadEvents(client);
             await loadCommands(client);
