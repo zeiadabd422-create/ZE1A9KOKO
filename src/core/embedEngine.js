@@ -4,9 +4,24 @@
  * المصدر: مراجعة المدير التقني لتحويل الكود من "جيد" إلى "عالمي"
  */
 
+function applyRandomChoices(str) {
+  if (!str || typeof str !== 'string') return str;
+  // pattern {choose:option1|option2|option3}
+  return str.replace(/\{choose:([^}]+)\}/g, (_match, list) => {
+    const parts = list.split('|');
+    if (parts.length === 0) return '';
+    const pick = parts[Math.floor(Math.random() * parts.length)];
+    return pick;
+  });
+}
+
 function parse(text, placeholders) {
   if (!text || typeof text !== 'string') return text;
   let out = text;
+
+  // apply {choose:...} randomizer first so choices are resolved once
+  out = applyRandomChoices(out);
+
   for (const [key, value] of Object.entries(placeholders)) {
     // دعم تبديل القيم حتى لو كانت أرقاماً أو كائنات بسيطة مع حماية من null
     const replacement = value !== null && value !== undefined ? String(value) : '';
@@ -27,9 +42,25 @@ function resolveColor(color) {
 export function render(data = {}, placeholders = {}) {
   const out = {};
 
+  // normalize placeholders and inject extra context variables
+  let ph = {};
+  if (placeholders && typeof placeholders === 'object') {
+    ph = { ...placeholders };
+
+    // if a guild member object was passed directly, derive extras
+    const isMember = placeholders.user && placeholders.guild && placeholders.joinedAt;
+    if (isMember) {
+      const member = placeholders;
+      ph.user_nick = ph.user_nick || member.nickname || member.user?.username || '';
+      ph.user_joindate = ph.user_joindate || (member.joinedAt ? member.joinedAt.toISOString() : '');
+      ph.server_boostcount = ph.server_boostcount || (member.guild?.premiumSubscriptionCount || 0);
+      ph.server = ph.server || (member.guild?.name || '');
+    }
+  }
+
   // المعالجة الأساسية مع دعم التبديل العالمي
-  if (data.title)       out.title       = parse(data.title, placeholders);
-  if (data.description) out.description = parse(data.description, placeholders);
+  if (data.title)       out.title       = parse(data.title, ph);
+  if (data.description) out.description = parse(data.description, ph);
   if (data.url)         out.url         = data.url;
   
   // معالجة اللون بشكل عالمي
@@ -72,6 +103,11 @@ export function render(data = {}, placeholders = {}) {
         value:  parse(f.value, placeholders),
         inline: !!f.inline,
       }));
+  }
+
+  // fail-safe: Discord limits embed descriptions to 4096 characters
+  if (out.description && out.description.length > 4096) {
+    return { error: 'EMBED_DESCRIPTION_TOO_LONG' };
   }
 
   return out;

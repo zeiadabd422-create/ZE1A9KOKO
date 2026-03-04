@@ -2,15 +2,15 @@
  * Welcome Module - Professional Member Onboarding & Goodbye System (Mimu Style)
  * Features:
  *   - Automatic "Unverified" role assignment on member join
- *   - Interactive embed editor with Modals (Mimu-style popups)
- *   - Placeholder support: {user}, {server}, {member_count}
+ *   - Interactive embed editor with Modals (Mimu-style popups) including title/description/color/thumbnail
+ *   - Placeholder support: {user}, {server}, {member_count} plus dynamic {user_nick}, {server_boostcount}, {user_joindate}
  *   - Comprehensive error handling with try-catch blocks
  *   - Only sends messages if module is enabled
  */
 
 import WelcomeConfig from './schema.js';
-import { parsePlaceholders } from '../../utils/placeholders.js';
 import { parseColor } from '../../utils/parseColor.js';
+import { render as renderEmbed } from '../../core/embedEngine.js';
 
 export default function WelcomeModule(client) {
   return {
@@ -21,54 +21,58 @@ export default function WelcomeModule(client) {
       try {
         if (!embedConfig) return null;
 
-        const title = await parsePlaceholders(embedConfig.title || '', member, guild);
-        const description = await parsePlaceholders(embedConfig.description || '', member, guild);
-        const footerText = await parsePlaceholders(embedConfig.footer_text || '', member, guild);
-        const authorName = await parsePlaceholders(embedConfig.author_name || '', member, guild);
-        const authorIcon = embedConfig.author_icon || '';
-        const footerImage = embedConfig.footer_image_url || '';
+        // build a template that mirrors discord embed structure
+        const template = {};
+        if (embedConfig.title) template.title = embedConfig.title;
+        if (embedConfig.description) template.description = embedConfig.description;
+        if (embedConfig.color) template.color = embedConfig.color;
 
-        const embed = {
-          title: title || 'Welcome',
-          description: description || 'Welcome to the server!',
-          color: parseColor(embedConfig.color, '#4f3ff0'),
-          footer: { text: footerText || 'Welcome' },
-        };
+        if (embedConfig.author_name) {
+          template.author = { name: embedConfig.author_name };
+          if (embedConfig.author_icon) template.author.iconURL = embedConfig.author_icon;
+        }
 
-        // Add author if provided
-        if (authorName && authorName.trim()) {
-          embed.author = { name: authorName };
-          if (authorIcon && authorIcon.trim()) {
-            embed.author.icon_url = authorIcon;
+        if (embedConfig.footer_text) {
+          template.footer = { text: embedConfig.footer_text };
+          if (embedConfig.footer_image_url) template.footer.iconURL = embedConfig.footer_image_url;
+        }
+
+        if (embedConfig.thumbnail_url) {
+          template.thumbnail = { url: embedConfig.thumbnail_url };
+        } else if (embedConfig.thumbnail_toggle && member && member.user && typeof member.user.displayAvatarURL === 'function') {
+          template.thumbnail = { url: member.user.displayAvatarURL({ dynamic: true }) };
+        }
+
+        if (embedConfig.image_url) {
+          template.image = { url: embedConfig.image_url };
+        }
+
+        // render using global engine which also handles placeholders, RNG, context
+        const rendered = renderEmbed(template, member || {});
+        if (rendered && rendered.error) {
+          if (rendered.error === 'EMBED_DESCRIPTION_TOO_LONG') {
+            console.warn('[Welcome] buildEmbed resulted in too-long description');
+          }
+          return null;
+        }
+
+        // ensure minimal defaults if the template was empty
+        if (rendered) {
+          if (!rendered.title) {
+            rendered.title = embedConfig.title || 'Welcome';
+          }
+          if (!rendered.description) {
+            rendered.description = embedConfig.description || 'Welcome to the server!';
           }
         }
 
-        // Add footer image if provided
-        if (footerImage && footerImage.trim()) {
-          embed.footer.icon_url = footerImage;
-        }
-
-        // Add thumbnail if user avatar is available and toggle is enabled
-        try {
-          if (embedConfig.thumbnail_toggle && member && member.user && typeof member.user.displayAvatarURL === 'function') {
-            embed.thumbnail = { url: member.user.displayAvatarURL({ dynamic: true }) };
-          }
-        } catch (thumbErr) {
-          console.warn('[Welcome] Failed to add thumbnail:', thumbErr.message);
-        }
-
-        // Add image if URL is provided
-        if (embedConfig.image_url && embedConfig.image_url.trim() && typeof embedConfig.image_url === 'string') {
+        if (rendered && rendered.color) {
           try {
-            // Basic URL validation
-            new URL(embedConfig.image_url);
-            embed.image = { url: embedConfig.image_url };
-          } catch (urlErr) {
-            console.warn('[Welcome] Invalid image URL:', urlErr.message);
-          }
+            rendered.color = parseColor(rendered.color, '#4f3ff0');
+          } catch (_e) {}
         }
 
-        return embed;
+        return rendered;
       } catch (err) {
         console.error('[Welcome] buildEmbed error:', err);
         return null;
@@ -329,6 +333,21 @@ export default function WelcomeModule(client) {
                   },
                 ],
               },
+              {
+                type: 1,
+                components: [
+                  {
+                    type: 4,
+                    custom_id: 'thumbnail_url',
+                    label: 'Thumbnail URL',
+                    placeholder: 'https://example.com/thumb.png',
+                    style: 1,
+                    value: embConfig?.thumbnail_url || '',
+                    required: false,
+                    max_length: 2000,
+                  },
+                ],
+              },
             ],
           };
         } else if (buttonType === 'author') {
@@ -552,6 +571,7 @@ export default function WelcomeModule(client) {
             const title = interaction.fields.getTextInputValue('title');
             const description = interaction.fields.getTextInputValue('description');
             const color = interaction.fields.getTextInputValue('color') || (embedType === 'welcome' ? '#4f3ff0' : '#ff4d4d');
+            const thumbnailUrl = interaction.fields.getTextInputValue('thumbnail_url') || '';
 
             // Validate color format
             if (!/^#[0-9A-Fa-f]{6}$/.test(color)) {
@@ -563,9 +583,45 @@ export default function WelcomeModule(client) {
               return;
             }
 
+            // Validate thumbnail URL if provided
+            if (thumbnailUrl && thumbnailUrl.trim()) {
+              try {
+                new URL(thumbnailUrl);
+              } catch (urlErr) {
+                try {
+                  await interaction.reply({ content: '❌ Invalid thumbnail URL. Make sure it starts with https://', ephemeral: true });
+                } catch (replyErr) {
+                  console.error('[Welcome] Failed to reply:', replyErr);
+                }
+                return;
+              }
+            }
+
+            // quick render check to catch description length or other engine errors
+            try {
+              const testPayload = { title, description, color };
+              if (thumbnailUrl) testPayload.thumbnail = { url: thumbnailUrl };
+              const placeholders = {
+                user: interaction.user.username,
+                server: interaction.guild.name,
+              };
+              const testRender = renderEmbed(testPayload, placeholders);
+              if (testRender && testRender.error === 'EMBED_DESCRIPTION_TOO_LONG') {
+                await interaction.reply({
+                  content: '❌ Description exceeds Discord limit (4096 characters). Your changes were not saved.',
+                  ephemeral: true,
+                });
+                return;
+              }
+            } catch (testErr) {
+              console.error('[Welcome] Basicinfo preview validation failed:', testErr);
+              // not fatal, continue with update
+            }
+
             update[`${embedKey}.title`] = title;
             update[`${embedKey}.description`] = description;
             update[`${embedKey}.color`] = color;
+            update[`${embedKey}.thumbnail_url`] = thumbnailUrl;
             successMessage = `${embedType === 'welcome' ? 'Welcome' : 'Goodbye'} • Basic Information updated!`;
 
           } else if (modalType === 'author') {

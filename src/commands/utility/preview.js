@@ -31,9 +31,19 @@ export default {
         user: interaction.user.username,
         server: interaction.guild.name,
         avatar: interaction.user.displayAvatarURL(),
+        user_nick: interaction.member?.nickname || interaction.user.username,
+        server_boostcount: interaction.guild?.premiumSubscriptionCount || 0,
+        user_joindate: interaction.member?.joinedAt ? interaction.member.joinedAt.toISOString() : '',
       };
 
       const embed = render(payload, placeholders);
+      
+      if (embed && embed.error === 'EMBED_DESCRIPTION_TOO_LONG') {
+        return await interaction.reply({
+          content: '❌ **Embed description is too long (4096 char limit).**',
+          ephemeral: true,
+        });
+      }
       
       await interaction.reply({ 
         embeds: [embed], 

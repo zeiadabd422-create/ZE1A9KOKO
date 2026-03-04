@@ -68,7 +68,11 @@ export async function createEmbed(config, overrideMessage = '', pageKey = '', me
   }
 
   const data = await renderEmbed(template, member);
-  if (overrideMessage) {
+  if (data && data.error === 'EMBED_DESCRIPTION_TOO_LONG') {
+    // bubble up so callers can catch and react
+    throw new Error('EMBED_DESCRIPTION_TOO_LONG');
+  }
+  if (overrideMessage && data) {
     data.description = overrideMessage;
   }
   if (data.color) {

@@ -56,6 +56,9 @@ export default class EmbedEngine {
 
     // let core engine render the JSON and resolve placeholders
     const data = await renderJson(template, member);
+    if (data && data.error === 'EMBED_DESCRIPTION_TOO_LONG') {
+      throw new Error('EMBED_DESCRIPTION_TOO_LONG');
+    }
 
     // override description if requested
     if (overrideMessage) {
@@ -73,5 +76,5 @@ export default class EmbedEngine {
 
     // now build the Discord.js EmbedBuilder for compatibility
     const emb = new EmbedBuilder(data);
-  }
+    return emb;  }
 }

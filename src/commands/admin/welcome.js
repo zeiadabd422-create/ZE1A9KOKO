@@ -148,13 +148,13 @@ New members will automatically receive the "${autoRole.name}" role on join. Gate
             .setColor(isWelcome ? 0x4f3ff0 : 0xff4d4d)
             .setTitle(`${isWelcome ? '👋 Edit Welcome' : '👋 Edit Goodbye'} Embed`)
             .setDescription('Choose what to customize:')
-            .setFooter({ text: '💡 Tip: Use {user}, {server}, {member_count} placeholders in text' });
+            .setFooter({ text: '💡 Tip: Use {user}, {server}, {member_count}, {user_nick}, {server_boostcount}, {user_joindate} placeholders in text' });
 
           // 4 separate buttons - Mimu style
           const row1 = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
               .setCustomId(`welcome_${embedType}_basicinfo`)
-              .setLabel('edit basic information (color / title / description)')
+              .setLabel('edit basic information (title / description / color / thumbnail)')
               .setStyle(ButtonStyle.Primary)
           );
 
