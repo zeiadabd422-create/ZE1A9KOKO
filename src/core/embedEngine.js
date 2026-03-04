@@ -1,60 +1,51 @@
-import { parsePlaceholders } from '../utils/placeholders.js';
+const { EmbedBuilder } = require('discord.js');
 
-function isObject(val) {
-  return val && typeof val === 'object' && !Array.isArray(val);
+class EmbedEngine {
+        static render(data, placeholders = {}) {
+                    const embed = new EmbedBuilder();
+
+                            const parse = (text) => {
+                                            if (!text || typeof text !== 'string') return text;
+                                                        let formatted = text;
+                                                                    for (const [key, value] of Object.entries(placeholders)) {
+                                                                                        formatted = formatted.replace(new RegExp(`{${key}}`, 'g'), value);
+                                                                    }
+                                                                                return formatted;
+                            };
+
+                                    if (data.title) embed.setTitle(parse(data.title));
+                                            if (data.description) embed.setDescription(parse(data.description));
+                                                    if (data.color) embed.setColor(data.color.startsWith('#') ? data.color : `#${data.color}`);
+                                                            
+                                                                    if (data.author) {
+                                                                                    embed.setAuthor({
+                                                                                                        name: parse(data.author.name),
+                                                                                                                        iconURL: parse(data.author.iconURL),
+                                                                                                                                        url: data.author.url
+                                                                                    });
+                                                                    }
+
+                                                                            if (data.fields && Array.isArray(data.fields)) {
+                                                                                            embed.addFields(data.fields.map(f => ({
+                                                                                                                name: parse(f.name),
+                                                                                                                                value: parse(f.value),
+                                                                                                                                                inline: !!f.inline
+                                                                                            })));
+                                                                            }
+
+                                                                                    if (data.thumbnail) embed.setThumbnail(parse(data.thumbnail));
+                                                                                            if (data.image) embed.setImage(parse(data.image));
+                                                                                                    if (data.footer) {
+                                                                                                                    embed.setFooter({
+                                                                                                                                        text: parse(data.footer.text),
+                                                                                                                                                        iconURL: parse(data.footer.iconURL)
+                                                                                                                    });
+                                                                                                    }
+
+                                                                                                            if (data.timestamp) embed.setTimestamp();
+
+                                                                                                                    return embed;
+        }
 }
 
-async function deepParse(value, member) {
-  if (Array.isArray(value)) {
-    const out = [];
-    for (let item of value) {
-      out.push(await deepParse(item, member));
-    }
-    return out;
-  }
-
-  if (isObject(value)) {
-    const obj = {};
-    for (const [k, v] of Object.entries(value)) {
-      obj[k] = await deepParse(v, member);
-    }
-    return obj;
-  }
-
-  if (typeof value === 'string' && member) {
-    // the placeholder parser is async, so we await here
-    try {
-      return await parsePlaceholders(value, member);
-    } catch (e) {
-      // parsing failure shouldn't break the engine, just return the
-      // original string (caller may log separately)
-      return value;
-    }
-  }
-
-  return value;
-}
-
-/**
- * Render a JSON embed template into a plain object suitable for passing
- * to Discord's API.  The engine is purely data‑driven and has no
- * dependencies on any Discord builder classes.  Placeholder replacement
- * happens automatically for any string value if a member context is
- * provided.
- *
- * Supported structure is the same as the JSON that would be stored in
- * the database; it handles nested `fields` arrays, and nested objects
- * for author/thumbnail/image/footer, etc.  Every string within the
- * template is traversed and passed through the placeholder engine.
- *
- * @param {Object} template  The raw JSON template (may come from Mongo).
- * @param {GuildMember|null} member  Optional member context for placeholders.
- * @returns {Promise<Object>} Plain object representing the embed data.
- */
-export async function render(template = {}, member = null) {
-  // clone to avoid mutating the original template
-  const copy = template && typeof template === 'object' ? JSON.parse(JSON.stringify(template)) : {};
-  return await deepParse(copy, member);
-}
-
-export default { render };
+module.exports = EmbedEngine;

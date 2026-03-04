@@ -1,3 +1,15 @@
+const requiredEnv = ['DISCORD_TOKEN', 'MONGO_URI', 'CLIENT_ID'];
+requiredEnv.forEach(key => {
+        if (!process.env[key]) {
+                    console.error(`[SYSTEM-CHECK] CRITICAL ERROR: ${key} is missing in .env!`);
+                            process.exit(1);
+        }
+});
+
+process.on('unhandledRejection', (reason) => {
+        console.error('[ANTI-CRASH] Unhandled Rejection:', reason);
+});
+
 import { Client, GatewayIntentBits, Collection, Partials } from "discord.js";
 import dotenv from "dotenv";
 import { connectDatabase } from "./core/database.js";
