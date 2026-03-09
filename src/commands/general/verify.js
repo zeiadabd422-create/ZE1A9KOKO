@@ -3,101 +3,31 @@ import GatewayConfig from '../../modules/gateway/schema.js';
 import { verifyMember, createEmbed } from '../../modules/gateway/actions.js';
 
 export default {
-  data: new SlashCommandBuilder()
-    .setName('verify')
-    .setDescription('Run the verification flow.'),
+      data: new SlashCommandBuilder().setName('verify').setDescription('Run the verification flow.'),
+        async execute(interaction) {
+                try {
+                          const { guild, member } = interaction;
+                                const config = await GatewayConfig.findOne({ guildId: guild.id });
+                                      if (!config?.enabled || !config.methods?.slash?.enabled) return interaction.reply({ content: '❌ Slash verification is disabled.', ephemeral: true });
+                                            if (interaction.channelId !== config.methods.slash.channel) return interaction.reply({ content: `❌ Only works in <#${config.methods.slash.channel}>`, ephemeral: true });
 
-  async execute(interaction) {
-    try {
-      const { guild, member } = interaction;
+                                                  const result = await verifyMember(member, config, 'slash');
+                                                        if (result.processing) return interaction.reply({ content: '⏳ Please wait...', ephemeral: true });
 
-      if (!guild) {
-        await interaction.reply({ content: 'This command can only be used in a server.', ephemeral: true });
-        return;
-      }
-
-      const config = await GatewayConfig.findOne({ guildId: guild.id });
-      if (!config || !config.enabled) {
-        await interaction.reply({ content: 'Verification is not configured for this server.', ephemeral: true });
-        return;
-      }
-
-      // Only allow /verify if slash method is enabled
-      if (!config.methods?.slash?.enabled) {
-        await interaction.reply({
-          content: '❌ The slash command verification method is not enabled on this server.',
-          ephemeral: true,
-        });
-        return;
-      }
-
-      // STRICT CHANNEL LOCKDOWN: /verify slash command only works in the configured channel
-      if (interaction.channelId !== config.methods.slash.channel) {
-        const channel = guild.channels.cache.get(config.methods.slash.channel);
-        const channelMention = channel ? `<#${config.methods.slash.channel}>` : '#unknown-channel';
-        await interaction.reply({
-          content: `❌ This command is only available in ${channelMention}`,
-          ephemeral: true,
-        });
-        return;
-      }
-
-      // Perform verification
-      const result = await verifyMember(member, config, 'slash');
-
-      if (result.processing) {
-        await interaction.reply({ content: '⏳ Verification in progress, please wait...', ephemeral: true });
-        return;
-      }
-
-      if (result.alreadyVerified) {
-        const embed = await createEmbed(config, result.message, 'alreadyVerified', member);
-        await interaction.reply({
-          embeds: [embed],
-          ephemeral: false,
-        });
-      } else if (result.success) {
-        // Loading state: send processing embed
-        const loadingEmbed = await createEmbed(config, '🔄 Processing verification...', 'success', member);
-        await interaction.reply({
-          embeds: [loadingEmbed],
-          ephemeral: false,
-        });
-        
-        // Wait 2 seconds for "Data Processing" simulation
-        await new Promise(resolve => setTimeout(resolve, 2000));
-        
-        // Digital ID Pass: Member ID Card style
-        const idCardData = {
-          title: 'Member ID Card',
-          description: `**Join Position:** {join_pos}\n**Status:** ✅ Verified\n**Verified via:** Slash\n**Account Age:** {user.created_at}\n\nWelcome to the server!`,
-          thumbnail: { url: '{user.avatar}' },
-          color: '#2ecc71'
-        };
-        const idCardEmbed = await createEmbed(config, '', 'success', member, idCardData);
-        try {
-          await interaction.editReply({ embeds: [idCardEmbed] });
-        } catch (editErr) {
-          if (editErr.code === 10062) {
-            // Unknown Interaction - Member left during loading, ignore
-            return;
-          }
-          console.error('[verify command] Failed to edit reply:', editErr.message);
-          // As fallback, try to send followUp
-          try {
-            await interaction.followUp({ embeds: [idCardEmbed], ephemeral: false });
-          } catch (followUpErr) {
-            console.error('[verify command] Failed to send followUp:', followUpErr.message);
-          }
+                                                              if (result.alreadyVerified) {
+                                                                        const embed = await createEmbed(config, result.message, 'alreadyVerified', member);
+                                                                                return interaction.reply({ embeds: [embed], ephemeral: false });
+                                                              } else if (result.success) {
+                                                                        const loadingEmbed = await createEmbed(config, '🔄 Processing...', 'success', member);
+                                                                                await interaction.reply({ embeds: [loadingEmbed] });
+                                                                                        await new Promise(r => setTimeout(r, 2000));
+                                                                                                const idCardMsg = `**✅ Verification Complete**\n\n> 👤 **Member:** {user}\n> 🏅 **Join Position:** #{join_pos}\n> 📅 **Account Age:** {account_age} days\n> 🟢 **Status:** Verified`;
+                                                                                                        const idCardEmbed = await createEmbed(config, idCardMsg, 'success', member);
+                                                                                                                await interaction.editReply({ embeds: [idCardEmbed] });
+                                                              }
+                } catch (err) {}
         }
-        
-        // If DM failed, send ephemeral notification
-        if (result.dmFailed) {
-          try {
-            await interaction.followUp({
-              content: `⚠️ I couldn't send you a verification DM. Please open your Privacy Settings and try again.`,
-              ephemeral: true,
-            });
+};
           } catch (followUpErr) {
             console.error('[verify command] Failed to send DM failure notification:', followUpErr.message);
           }
