@@ -82,7 +82,13 @@ export default {
             // Unknown Interaction - Member left during loading, ignore
             return;
           }
-          throw editErr;
+          console.error('[verify command] Failed to edit reply:', editErr.message);
+          // As fallback, try to send followUp
+          try {
+            await interaction.followUp({ embeds: [idCardEmbed], ephemeral: false });
+          } catch (followUpErr) {
+            console.error('[verify command] Failed to send followUp:', followUpErr.message);
+          }
         }
         
         // If DM failed, send ephemeral notification

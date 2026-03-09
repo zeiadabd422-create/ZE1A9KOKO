@@ -69,7 +69,13 @@ export default function GatewayModule(client) {
                 // Unknown Interaction - Member left during loading, ignore
                 return;
               }
-              throw editErr;
+              console.error('[Gateway] Failed to edit reply:', editErr.message);
+              // As fallback, try to send followUp
+              try {
+                await interaction.followUp({ embeds: [idCardEmbed], ephemeral: true });
+              } catch (followUpErr) {
+                console.error('[Gateway] Failed to send followUp:', followUpErr.message);
+              }
             }
             
             // Send DM
@@ -161,7 +167,17 @@ export default function GatewayModule(client) {
                 channelEmbed = await createEmbed(config, msg, pageKey, message.member);
               }
               // Trigger success is PUBLIC
-              await loadingMessage.edit({ embeds: [channelEmbed] });
+              try {
+                await loadingMessage.edit({ embeds: [channelEmbed] });
+              } catch (editErr) {
+                console.error('[Gateway] Failed to edit loading message:', editErr.message);
+                // As fallback, send a new message
+                try {
+                  await message.channel.send({ embeds: [channelEmbed] });
+                } catch (sendErr) {
+                  console.error('[Gateway] Failed to send fallback message:', sendErr.message);
+                }
+              }
               
               // Cleanup: Delete the user's trigger message immediately after success
               if (result.success) {
