@@ -25,7 +25,9 @@ function parse(text, placeholders) {
   for (const [key, value] of Object.entries(placeholders)) {
     // دعم تبديل القيم حتى لو كانت أرقاماً أو كائنات بسيطة مع حماية من null
     const replacement = value !== null && value !== undefined ? String(value) : '';
-    out = out.replace(new RegExp(`\\{${key}\\}`, 'g'), replacement);
+    // Escape special regex characters in the key to ensure {user.avatar} matches correctly
+    const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    out = out.replace(new RegExp(`\\{${escapedKey}\\}`, 'g'), replacement);
   }
   return out;
 }
@@ -68,7 +70,7 @@ export function render(data = {}, placeholders = {}) {
       
       // user avatar
       try {
-        ph['user.avatar'] = member.displayAvatarURL({ dynamic: true, size: 256 }) || '';
+        ph['user.avatar'] = member.displayAvatarURL({ dynamic: true, size: 512 }) || '';
       } catch (_e) {
         ph['user.avatar'] = '';
       }

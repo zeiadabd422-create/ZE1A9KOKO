@@ -26,7 +26,7 @@ export async function parsePlaceholders(text, member) {
     if (member.user) {
       result = result.replace(/{user}/g, `<@${member.id}>`);
       result = result.replace(/{user_name}/g, member.user.username || '');
-      result = result.replace(/{user\.avatar}/g, member.displayAvatarURL({ dynamic: true, size: 256 }) || '');
+      result = result.replace(/{user\.avatar}/g, member.displayAvatarURL({ dynamic: true, size: 512 }) || '');
       
       // account age
       try {

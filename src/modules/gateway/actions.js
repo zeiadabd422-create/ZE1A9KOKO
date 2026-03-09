@@ -216,7 +216,7 @@ export async function verifyMember(member, config, method) {
       } else {
         try {
           await user.send({ embeds: [dmEmbed] });
-          console.log(`[Gateway] DM sent successfully to ${user.tag || user.id}`);
+          // Log at debug level only after full verification succeeds, not during build
         } catch (dmErr) {
           dmFailed = true;
           const dmCode = dmErr && (dmErr.code || dmErr.httpStatus) ? (dmErr.code || dmErr.httpStatus) : 'UNKNOWN';

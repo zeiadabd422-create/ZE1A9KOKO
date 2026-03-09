@@ -3,6 +3,7 @@
  * Supports Button, Trigger, Slash, and Join methods simultaneously
  */
 
+import { MessageFlags } from 'discord.js';
 import GatewayConfig from './schema.js';
 import { checkTriggerWord } from './checker.js';
 import { verifyMember, sendVerificationPrompt, createEmbed, clearEmbedCache } from './actions.js';
@@ -38,18 +39,18 @@ export default function GatewayModule(client) {
           const result = await verifyMember(interaction.member, config, 'button');
 
           if (result.processing) {
-            await interaction.reply({ content: '⏳ Verification in progress, please wait...', ephemeral: true });
+            await interaction.reply({ content: '⏳ Verification in progress, please wait...', flags: [MessageFlags.Ephemeral] });
             return;
           }
 
           if (result.alreadyVerified) {
             const embed = await createEmbed(config, result.message, 'alreadyVerified', interaction.member);
             // Button response is EPHEMERAL (private)
-            await interaction.reply({ embeds: [embed], ephemeral: true });
+            await interaction.reply({ embeds: [embed], flags: [MessageFlags.Ephemeral] });
           } else if (result.success) {
             // Loading state: send processing embed
             const loadingEmbed = await createEmbed(config, '🔄 Processing verification...', 'success', interaction.member);
-            await interaction.reply({ embeds: [loadingEmbed], ephemeral: true });
+            await interaction.reply({ embeds: [loadingEmbed], flags: [MessageFlags.Ephemeral] });
             
             // Wait 2 seconds for "Data Processing" simulation
             await new Promise(resolve => setTimeout(resolve, 2000));
@@ -70,11 +71,33 @@ export default function GatewayModule(client) {
                 return;
               }
               console.error('[Gateway] Failed to edit reply:', editErr.message);
-              // As fallback, try to send followUp
-              try {
-                await interaction.followUp({ embeds: [idCardEmbed], ephemeral: true });
-              } catch (followUpErr) {
-                console.error('[Gateway] Failed to send followUp:', followUpErr.message);
+              
+              // If edit fails (e.g., Invalid Form Body), try plain text fallback first
+              if (editErr.message && editErr.message.includes('Invalid Form Body')) {
+                try {
+                  await interaction.editReply({ 
+                    content: '✅ **Verification Successful!**\n\nYou have been verified and granted access to the server. Welcome!',
+                    embeds: []
+                  });
+                } catch (fallbackErr) {
+                  console.error('[Gateway] Plain text fallback failed:', fallbackErr.message);
+                  // Last resort: send followUp with plain text
+                  try {
+                    await interaction.followUp({ 
+                      content: '✅ **Verification Successful!**\n\nYou have been verified and granted access to the server. Welcome!',
+                      flags: [MessageFlags.Ephemeral] 
+                    });
+                  } catch (followUpErr) {
+                    console.error('[Gateway] Failed to send followUp:', followUpErr.message);
+                  }
+                }
+              } else {
+                // For other errors, try send followUp
+                try {
+                  await interaction.followUp({ embeds: [idCardEmbed], flags: [MessageFlags.Ephemeral] });
+                } catch (followUpErr) {
+                  console.error('[Gateway] Failed to send followUp:', followUpErr.message);
+                }
               }
             }
             
@@ -83,21 +106,21 @@ export default function GatewayModule(client) {
               try {
                 await interaction.followUp({
                   content: `⚠️ I couldn't send you a verification DM. Please open your Privacy Settings.`,
-                  ephemeral: true,
+                  flags: [MessageFlags.Ephemeral],
                 });
               } catch (followUpErr) {
                 console.error('[Gateway] Failed to send DM failure notification:', followUpErr.message);
               }
             }
           } else {
-            await interaction.reply({ content: `❌ ${result.message}`, ephemeral: true });
+            await interaction.reply({ content: `❌ ${result.message}`, flags: [MessageFlags.Ephemeral] });
           }
         }
       } catch (err) {
         console.error('[Gateway] Interaction handler error:', err);
         try {
           if (interaction.isRepliable() && !interaction.replied) {
-            await interaction.reply({ content: 'An error occurred during verification.', ephemeral: true });
+            await interaction.reply({ content: 'An error occurred during verification.', flags: [MessageFlags.Ephemeral] });
           }
         } catch (e) {
           // swallow
@@ -142,7 +165,8 @@ export default function GatewayModule(client) {
             return;
           }
 
-          if (result.alreadyVerified || result.success) {
+          // TRIGGER LOGIC FIX: Only execute verification path, no "Already Verified" messages
+          if (result.success) {
             try {
               // Loading state: send processing embed
               const loadingEmbed = await createEmbed(config, '🔄 Processing verification...', 'success', message.member);
@@ -152,42 +176,54 @@ export default function GatewayModule(client) {
               await new Promise(resolve => setTimeout(resolve, 2000));
               
               // Digital ID Pass: Member ID Card style
-              const pageKey = result.alreadyVerified ? 'alreadyVerified' : 'success';
-              let channelEmbed;
-              if (result.success) {
-                const idCardData = {
-                  title: 'Member ID Card',
-                  description: `**Join Position:** {join_pos}\n**Status:** ✅ Verified\n**Verified via:** Trigger\n**Account Age:** {user.created_at}\n\nWelcome to the server!`,
-                  thumbnail: { url: '{user.avatar}' },
-                  color: '#2ecc71'
-                };
-                channelEmbed = await createEmbed(config, '', pageKey, message.member, idCardData);
-              } else {
-                const msg = result.alreadyVerified ? (result.message || '') : '';
-                channelEmbed = await createEmbed(config, msg, pageKey, message.member);
-              }
+              const idCardData = {
+                title: 'Member ID Card',
+                description: `**Join Position:** {join_pos}\n**Status:** ✅ Verified\n**Verified via:** Trigger\n**Account Age:** {user.created_at}\n\nWelcome to the server!`,
+                thumbnail: { url: '{user.avatar}' },
+                color: '#2ecc71'
+              };
+              const channelEmbed = await createEmbed(config, '', 'success', message.member, idCardData);
               // Trigger success is PUBLIC
               try {
                 await loadingMessage.edit({ embeds: [channelEmbed] });
               } catch (editErr) {
                 console.error('[Gateway] Failed to edit loading message:', editErr.message);
-                // As fallback, send a new message
-                try {
-                  await message.channel.send({ embeds: [channelEmbed] });
-                } catch (sendErr) {
-                  console.error('[Gateway] Failed to send fallback message:', sendErr.message);
+                
+                // If edit fails (e.g., Invalid Form Body), try plain text fallback
+                if (editErr.message && editErr.message.includes('Invalid Form Body')) {
+                  try {
+                    await loadingMessage.edit({ 
+                      content: '✅ **Verification Successful!**\n\nYou have been verified and granted access to the server. Welcome!',
+                      embeds: []
+                    });
+                  } catch (fallbackErr) {
+                    console.error('[Gateway] Plain text fallback failed:', fallbackErr.message);
+                    // Last resort: send a new message
+                    try {
+                      await message.channel.send({ 
+                        content: '✅ **Verification Successful!**\n\nYou have been verified and granted access to the server. Welcome!'
+                      });
+                    } catch (sendErr) {
+                      console.error('[Gateway] Failed to send fallback message:', sendErr.message);
+                    }
+                  }
+                } else {
+                  // For other errors, send a new message
+                  try {
+                    await message.channel.send({ embeds: [channelEmbed] });
+                  } catch (sendErr) {
+                    console.error('[Gateway] Failed to send fallback message:', sendErr.message);
+                  }
                 }
               }
               
               // Cleanup: Delete the user's trigger message immediately after success
-              if (result.success) {
-                try {
-                  if (message.deletable && message.guild.members.me.permissionsIn(message.channel).has('MANAGE_MESSAGES')) {
-                    await message.delete();
-                  }
-                } catch (deleteErr) {
-                  console.error('[Gateway] Failed to delete trigger message:', deleteErr.message);
+              try {
+                if (message.deletable && message.guild.members.me.permissionsIn(message.channel).has('MANAGE_MESSAGES')) {
+                  await message.delete();
                 }
+              } catch (deleteErr) {
+                console.error('[Gateway] Failed to delete trigger message:', deleteErr.message);
               }
             } catch (sendErr) {
               console.error('[Gateway] Failed to send channel embed:', sendErr.message);
