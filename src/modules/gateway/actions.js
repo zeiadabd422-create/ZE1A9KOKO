@@ -8,6 +8,7 @@ import { validateRaidShield, getAccountAgeDays } from './checker.js';
 import { parseColor } from '../../utils/parseColor.js';
 import { render as renderEmbed } from '../../core/embedEngine.js';
 import { BoundedMap } from '../../utils/cache.js';
+import GatewayConfig from './schema.js';
 import { parsePlaceholders } from '../../utils/placeholders.js';
 
 // simple in-memory cache for rendered embeds; keyed the same way as before
@@ -122,13 +123,19 @@ export async function verifyMember(member, config, method) {
     const hasUnverified = member.roles.cache.has(config.unverifiedRole);
     const hasVerifiedRole = member.roles.cache.has(config.verifiedRole);
 
-    // If the member does not have the unverified role, do not run gateway flows
+    // If the member does not have the unverified role, check if they actually have verified role
     if (!hasUnverified) {
-      return { 
-        success: false, 
-        message: config.alreadyVerifiedMsg || 'You are already verified in this server!',
-        alreadyVerified: true,
-      };
+      if (hasVerifiedRole) {
+        console.log(`[Gateway] User ${member.user.tag} already verified: has verified role in Discord`);
+        return { 
+          success: false, 
+          message: config.alreadyVerifiedMsg || 'You are already verified in this server!',
+          alreadyVerified: true,
+        };
+      } else {
+        console.log(`[Gateway] User ${member.user.tag} desync detected: no unverified role and no verified role in Discord, allowing re-verification`);
+        // Allow re-verification by adding unverified role back if needed, but since they don't have it, proceed
+      }
     }
 
     // Step 0: Check Raid Shield (Account Age)
@@ -163,8 +170,12 @@ export async function verifyMember(member, config, method) {
     try {
       if (!member.roles.cache.has(config.verifiedRole)) {
         await member.roles.add(config.verifiedRole);
+        console.log(`[Gateway] Added verified role to ${member.user.tag}`);
+      } else {
+        console.log(`[Gateway] User ${member.user.tag} already has verified role`);
       }
     } catch (err) {
+      console.error(`[Gateway] Failed to add verified role to ${member.user.tag}: ${err.message}`);
       return { success: false, message: `Failed to add verified role: ${err.message}` };
     }
 
@@ -172,6 +183,9 @@ export async function verifyMember(member, config, method) {
     try {
       if (member.roles.cache.has(config.unverifiedRole)) {
         await member.roles.remove(config.unverifiedRole);
+        console.log(`[Gateway] Removed unverified role from ${member.user.tag}`);
+      } else {
+        console.log(`[Gateway] User ${member.user.tag} does not have unverified role to remove`);
       }
     } catch (err) {
       console.error('[Gateway] Failed to remove unverified role:', err.message);
@@ -209,6 +223,21 @@ export async function verifyMember(member, config, method) {
     } catch (embedErr) {
       console.error('[Gateway] Failed to create DM embed:', embedErr && embedErr.message ? embedErr.message : embedErr);
       dmFailed = true;
+    }
+
+    // Update userStates in DB
+    try {
+      await GatewayConfig.updateOne(
+        { guildId: member.guild.id },
+        {
+          $set: {
+            [`userStates.${member.id}.verificationTimestamp`]: new Date(),
+          }
+        }
+      );
+      console.log(`[Gateway] Updated verification timestamp for ${member.user.tag}`);
+    } catch (dbErr) {
+      console.error(`[Gateway] Failed to update userStates: ${dbErr.message}`);
     }
 
     return { 
