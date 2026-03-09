@@ -74,7 +74,12 @@ export async function createEmbed(config, overrideMessage = '', pageKey = '', me
     throw new Error('EMBED_DESCRIPTION_TOO_LONG');
   }
   if (overrideMessage && data) {
-    data.description = overrideMessage;
+    // Process overrideMessage through parsePlaceholders BEFORE setting description
+    if (member) {
+      data.description = await parsePlaceholders(overrideMessage, member);
+    } else {
+      data.description = overrideMessage;
+    }
   }
   if (data.color) {
     try {
@@ -98,7 +103,7 @@ export async function verifyMember(member, config, method) {
   if (member && member.id && member.guild && member.guild.id) {
     const key = `${member.guild.id}:${member.id}`;
     if (_processingUsers.has(key)) {
-      return { success: false, message: 'Verification already in progress for this user' };
+      return { processing: true };
     }
     _processingUsers.add(key);
   }

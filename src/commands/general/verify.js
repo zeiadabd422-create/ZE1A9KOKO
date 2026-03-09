@@ -45,6 +45,11 @@ export default {
       // Perform verification
       const result = await verifyMember(member, config, 'slash');
 
+      if (result.processing) {
+        await interaction.reply({ content: '⏳ Verification in progress, please wait...', ephemeral: true });
+        return;
+      }
+
       if (result.alreadyVerified) {
         const embed = await createEmbed(config, result.message, 'alreadyVerified', member);
         await interaction.reply({
@@ -64,7 +69,15 @@ export default {
         
         // Digital ID Pass: Member ID Card style
         const idCardEmbed = await createEmbed(config, `**Member ID Card**\n\n**Join Position:** {join_pos}\n**Status:** ✅ Verified\n\nWelcome to the server!`, 'success', member);
-        await interaction.editReply({ embeds: [idCardEmbed] });
+        try {
+          await interaction.editReply({ embeds: [idCardEmbed] });
+        } catch (editErr) {
+          if (editErr.code === 10062) {
+            // Unknown Interaction - Member left during loading, ignore
+            return;
+          }
+          throw editErr;
+        }
         
         // If DM failed, send ephemeral notification
         if (result.dmFailed) {

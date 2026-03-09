@@ -53,7 +53,7 @@ export default class TaskScheduler {
       const configsWithExpiredRoles = await GatewayConfig.find({
         enabled: true,
         "userStates.tempRoles.expiresAt": { $lte: new Date() }
-      });
+      }).select("guildId userStates");
       
       for (const config of configsWithExpiredRoles) {
         if (!config.userStates || typeof config.userStates !== 'object') continue;

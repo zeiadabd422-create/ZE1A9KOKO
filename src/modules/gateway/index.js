@@ -37,6 +37,11 @@ export default function GatewayModule(client) {
 
           const result = await verifyMember(interaction.member, config, 'button');
 
+          if (result.processing) {
+            await interaction.reply({ content: '⏳ Verification in progress, please wait...', ephemeral: true });
+            return;
+          }
+
           if (result.alreadyVerified) {
             const embed = await createEmbed(config, result.message, 'alreadyVerified', interaction.member);
             // Button response is EPHEMERAL (private)
@@ -51,7 +56,15 @@ export default function GatewayModule(client) {
             
             // Digital ID Pass: Member ID Card style
             const idCardEmbed = await createEmbed(config, `**Member ID Card**\n\n**Join Position:** {join_pos}\n**Status:** ✅ Verified\n\nWelcome to the server!`, 'success', interaction.member);
-            await interaction.editReply({ embeds: [idCardEmbed] });
+            try {
+              await interaction.editReply({ embeds: [idCardEmbed] });
+            } catch (editErr) {
+              if (editErr.code === 10062) {
+                // Unknown Interaction - Member left during loading, ignore
+                return;
+              }
+              throw editErr;
+            }
             
             // Send DM
             if (result.dmFailed) {
@@ -110,14 +123,13 @@ export default function GatewayModule(client) {
         if (checkTriggerWord(content, triggerWordLower)) {
           console.log(`[Gateway] Trigger word matched for ${message.author.tag}`);
           
-          try {
-            await message.react('✅').catch(() => {});
-          } catch (err) {
-            console.error('[Gateway] Failed to react:', err.message);
+          const result = await verifyMember(message.member, config, 'trigger');
+
+          if (result.processing) {
+            // For trigger, we can't reply ephemeral, so just ignore to prevent spam
+            return;
           }
 
-          const result = await verifyMember(message.member, config, 'trigger');
-          
           if (result.alreadyVerified || result.success) {
             try {
               // Loading state: send processing embed
@@ -137,7 +149,7 @@ export default function GatewayModule(client) {
               // Cleanup: Delete the user's trigger message immediately after success
               if (result.success) {
                 try {
-                  if (message.deletable) {
+                  if (message.deletable && message.guild.members.me.permissionsIn(message.channel).has('MANAGE_MESSAGES')) {
                     await message.delete();
                   }
                 } catch (deleteErr) {
