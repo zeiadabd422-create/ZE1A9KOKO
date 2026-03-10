@@ -1,6 +1,6 @@
 import { SlashCommandBuilder } from 'discord.js';
 import GatewayConfig from '../../modules/gateway/schema.js';
-import { verifyMember, createEmbed, DEFAULT_ID_CARD } from '../../modules/gateway/actions.js';
+import { verifyMember, createEmbed, DEFAULT_ID_CARD, startDMVerification } from '../../modules/gateway/actions.js';
 
 export default {
   data: new SlashCommandBuilder().setName('verify').setDescription('Run the verification flow.'),
@@ -12,6 +12,15 @@ export default {
         return interaction.reply({ content: '❌ Slash verification is disabled.', ephemeral: true });
       if (interaction.channelId !== config.methods.slash.channel)
         return interaction.reply({ content: `❌ Only works in <#${config.methods.slash.channel}>`, ephemeral: true });
+
+      // global lockdown check: all methods redirect to DM gauntlet
+      if (config.lockdownMode) {
+        await startDMVerification(member, config);
+        return interaction.reply({
+          content: '⚠️ Security Lockdown Active. Check your DMs to complete advanced human verification.',
+          ephemeral: true,
+        });
+      }
 
       const result = await verifyMember(member, config, 'slash');
       if (result.processing)

@@ -300,9 +300,11 @@ export async function startDMVerification(member, config) {
       return false;
     }
 
-    // Phase 2: Numeric code
+    // Phase 2: Numeric code - send as SVG image attachment to obfuscate
     const code = String(Math.floor(1000 + Math.random() * 9000));
-    await dmChannel.send(`🔢 **Phase 2:** Reply with this code: \`${code}\``);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="240" height="80"><rect width="100%" height="100%" fill="#ffffff"/><text x="50%" y="50%" font-size="40" font-family="Arial" text-anchor="middle" dominant-baseline="middle" fill="#000000">${code}</text></svg>`;
+    const buffer = Buffer.from(svg);
+    await dmChannel.send({ content: '🔢 **Phase 2:** Reply with the code shown below.', files: [{ attachment: buffer, name: 'code.svg' }] });
     const passed2 = await new Promise(resolve => {
       const collector = dmChannel.createMessageCollector({ filter: m => m.author.id === user.id, time: 60000, max: 1 });
       collector.on('collect', m => resolve(m.content.trim() === code));
@@ -313,17 +315,18 @@ export async function startDMVerification(member, config) {
       return false;
     }
 
-    // Phase 3: Animal image
+    // Phase 3: Animal image (local assets)
+    const path = require('path');
     const animals = [
-      { name: 'lion', url: 'https://i.imgur.com/4AiXzf8.jpg' },
-      { name: 'cat', url: 'https://i.imgur.com/JlUvsxa.jpg' },
-      { name: 'dog', url: 'https://i.imgur.com/0nQn5vA.jpg' },
+      { name: 'lion', file: path.join(__dirname, '../../assets/animals/lion.png') },
+      { name: 'cat',  file: path.join(__dirname, '../../assets/animals/cat.png')  },
+      { name: 'dog',  file: path.join(__dirname, '../../assets/animals/dog.png')  },
     ];
     const pick = animals[Math.floor(Math.random() * animals.length)];
-    await dmChannel.send({ content: '🐾 **Phase 3:** What animal is shown below?', files: [pick.url] });
+    await dmChannel.send({ content: '🐾 **Phase 3:** What animal is shown below?', files: [{ attachment: pick.file, name: `${pick.name}.png` }] });
     const passed3 = await new Promise(resolve => {
       const collector = dmChannel.createMessageCollector({ filter: m => m.author.id === user.id, time: 60000, max: 1 });
-      collector.on('collect', m => resolve(m.content.trim().toLowerCase() === pick.name));
+      collector.on('collect', m => resolve(m.content.trim().toLowerCase() === pick.name.toLowerCase()));
       collector.on('end', col => resolve(false));
     });
     if (!passed3) {
