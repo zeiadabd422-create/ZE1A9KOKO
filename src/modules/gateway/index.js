@@ -18,6 +18,26 @@ export default function GatewayModule(client) {
         // lockdown levels replace the old boolean flag
         const lockdownResult = await getLockdownResponse(message.member, config, 'trigger');
         if (lockdownResult) {
+          if (lockdownResult.queueFull) {
+            // too many users in queue
+            if (message.channel && message.channel.send) {
+              await message.channel.send('⚠️ Wait a moment, the queue is full.');
+            }
+            if (message.deletable) await message.delete().catch(() => {});
+            return;
+          }
+          if (lockdownResult.dmFailed) {
+            if (message.channel && message.channel.send) {
+              await message.channel.send("❌ I cannot DM you. Please enable 'Allow Direct Messages' in your privacy settings and try again.");
+            }
+            if (message.deletable) await message.delete().catch(() => {});
+            return;
+          }
+          if (lockdownResult.already) {
+            // already running gauntlet; ignore
+            if (message.deletable) await message.delete().catch(() => {});
+            return;
+          }
           if (lockdownResult.lockdown === 1 || lockdownResult.lockdown === 2) {
             if (message.channel && message.channel.send) {
               await message.channel.send('⚠️ Security Lockdown Active. Check your DMs to complete advanced human verification.');
@@ -53,6 +73,15 @@ export default function GatewayModule(client) {
           return;
         }
 
+        // DM failure handling for closed DMs
+        if (result.dmFailed && result.dmErrorCode === 50007) {
+          if (message.channel && message.channel.send) {
+            await message.channel.send("❌ I cannot DM you. Please enable 'Allow Direct Messages' in your privacy settings and try again.");
+          }
+          if (message.deletable) await message.delete().catch(() => {});
+          return;
+        }
+
         // failure case
         const errorEmbed = await createEmbed(config, result.message || 'Verification failed.', 'error', message.member);
         return message.channel.send({ embeds: [errorEmbed] });
@@ -78,6 +107,25 @@ export default function GatewayModule(client) {
 
         const lockdownResult = await getLockdownResponse(interaction.member, config, method);
         if (lockdownResult) {
+          if (lockdownResult.queueFull) {
+            if (interaction.isRepliable()) {
+              await interaction.reply({ content: '⚠️ Wait a moment, the queue is full.', ephemeral: true });
+            }
+            return;
+          }
+          if (lockdownResult.dmFailed) {
+            if (interaction.isRepliable()) {
+              await interaction.reply({
+                content: "❌ I cannot DM you. Please enable 'Allow Direct Messages' in your privacy settings and try again.",
+                ephemeral: true,
+              });
+            }
+            return;
+          }
+          if (lockdownResult.already) {
+            // ignore duplicate start
+            return;
+          }
           if (lockdownResult.lockdown === 1 || lockdownResult.lockdown === 2) {
             startDMVerification(interaction.member, config).catch(err => console.error('[Gateway] lockdown DM flow error', err));
             if (interaction.isRepliable()) {
@@ -110,6 +158,17 @@ export default function GatewayModule(client) {
           await new Promise(r => setTimeout(r, 2000));
           const idCardEmbed = await createEmbed(config, DEFAULT_ID_CARD, 'success', interaction.member);
           await interaction.editReply({ embeds: [idCardEmbed] });
+          return;
+        }
+
+        // DM failure handling
+        if (result.dmFailed && result.dmErrorCode === 50007) {
+          if (interaction.isRepliable()) {
+            await interaction.reply({
+              content: "❌ I cannot DM you. Please enable 'Allow Direct Messages' in your privacy settings and try again.",
+              ephemeral: true,
+            });
+          }
           return;
         }
 

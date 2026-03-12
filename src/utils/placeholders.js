@@ -13,15 +13,8 @@ export async function parsePlaceholders(text, member) {
                                   result = result.replace(/{server}/g, guild.name).replace(/{member_count}/g, guild.memberCount.toString());
                                         try {
                                                     // calculate join position accurately by fetching all members if cache is partial
-                                                    let membersArray = Array.from(guild.members.cache.values());
-                                                    if (membersArray.length < guild.memberCount && guild.members.fetch) {
-                                                      try {
-                                                        const fetched = await guild.members.fetch();
-                                                        membersArray = Array.from(fetched.values());
-                                                      } catch (_e) {
-                                                        // ignore fetch failure, fall back to cache
-                                                      }
-                                                    }
+                                                    // use only cached members to avoid hitting rate limits
+                                                    const membersArray = Array.from(guild.members.cache.values());
                                                     membersArray.sort((a, b) => (a.joinedAt || 0) - (b.joinedAt || 0));
                                                     const joinPos = membersArray.findIndex(m => m.id === member.id) + 1;
                                                                     result = result.replace(/{join_pos}/g, joinPos > 0 ? joinPos.toString() : 'Unknown');

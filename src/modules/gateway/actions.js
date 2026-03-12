@@ -27,6 +27,10 @@ export const DEFAULT_ID_CARD = `**✅ Digital ID Pass Issued**
 // المفتاح مركّب guildId:userId لعزل الـ guilds عن بعضها
 const _processingUsers = new Set();
 
+// ── Track active DM gauntlets (level1/level2) to avoid starting two flows for same user
+// Map<userId, 'dm'|'strict'>
+const _activeGauntlets = new Map();
+
 /**
  * امسح embed cache لـ guild معيّنة عند تغيير الإعدادات
  */
@@ -198,6 +202,7 @@ export async function verifyMember(member, config, method) {
 
     // ── Step 3: أرسل DM للمستخدم ──
     let dmFailed = false;
+    let dmErrorCode = null;
     try {
       const dmEmbed = await createEmbed(config, '', 'dm', member);
       let user = member.user;
@@ -217,6 +222,7 @@ export async function verifyMember(member, config, method) {
           console.log(`[Gateway] DM sent to ${user.tag || user.id}`);
         } catch (dmErr) {
           dmFailed = true;
+          dmErrorCode = dmErr.code;
           const reason = dmErr.code === 50007
             ? 'DMs disabled by user'
             : (dmErr.message || JSON.stringify(dmErr));
@@ -228,7 +234,7 @@ export async function verifyMember(member, config, method) {
       console.error('[Gateway] Failed to create DM embed:', embedErr.message);
     }
 
-    return { success: true, message: 'Verification successful', alreadyVerified: false, dmFailed };
+    return { success: true, message: 'Verification successful', alreadyVerified: false, dmFailed, dmErrorCode };
 
   } catch (err) {
     return { success: false, message: `Verification error: ${err.message}` };
@@ -269,15 +275,37 @@ export async function getLockdownResponse(member, config, method) {
       return verifyMember(member, config, method);
     case 1:
       // basic DM gauntlet; callers are responsible for notifying the channel
-      startDMVerification(member, config).catch(err =>
-        console.error('[Gateway] lockdown DM flow error', err)
-      );
+      if (_activeGauntlets.has(member.id)) {
+        return { lockdown: 1, already: true };
+      }
+      // await the start result to detect DM closure
+      try {
+        const res = await startDMVerification(member, config);
+        if (res?.dmClosed) {
+          return { lockdown: 1, dmFailed: true };
+        }
+      } catch (e) {
+        console.error('[Gateway] lockdown DM flow error', e);
+      }
       return { lockdown: 1 };
-    case 2:
-      startStrictGauntlet(member, config).catch(err =>
-        console.error('[Gateway] strict lockdown flow error', err)
-      );
+    case 2: {
+      if (_activeGauntlets.has(member.id)) {
+        return { lockdown: 2, already: true };
+      }
+      const strictCount = Array.from(_activeGauntlets.values()).filter(v => v === 'strict').length;
+      if (strictCount >= 50) {
+        return { lockdown: 2, queueFull: true };
+      }
+      try {
+        const res = await startStrictGauntlet(member, config);
+        if (res?.dmClosed) {
+          return { lockdown: 2, dmFailed: true };
+        }
+      } catch (e) {
+        console.error('[Gateway] strict lockdown flow error', e);
+      }
       return { lockdown: 2 };
+    }
     case 3:
       return { lockdown: 3, message: '⚠️ System Closed: verification temporarily disabled.' };
     default:
@@ -305,17 +333,28 @@ export async function sendChannelEmbed(channel, config, message, member = null) 
  * @param {Object} config
  */
 export async function startDMVerification(member, config) {
-  if (!member || !member.user) return false;
+  if (!member || !member.user) return { success: false };
+  // race guard for simultaneous gauntlets
+  if (_activeGauntlets.has(member.id)) return { success: false };
+  _activeGauntlets.set(member.id, 'dm');
+  let dmClosed = false;
   try {
     const user = member.user;
     let dmChannel;
     try {
       dmChannel = await user.createDM();
-    } catch {
+    } catch (e) {
+      // may be closed DMs
+      if (e.code === 50007) dmClosed = true;
       // fallback via send
-      dmChannel = await user.send('👋 Starting lockdown verification...').then(m => m.channel).catch(() => null);
+      try {
+        dmChannel = await user.send('👋 Starting lockdown verification...').then(m => m.channel);
+      } catch (sendErr) {
+        if (sendErr.code === 50007) dmClosed = true;
+        dmChannel = null;
+      }
     }
-    if (!dmChannel) return false;
+    if (!dmChannel) return { success: false, dmClosed };
 
     // Phase 1: Color
     const colors = ['Red', 'Green', 'Blue'];
@@ -352,7 +391,7 @@ export async function startDMVerification(member, config) {
     }
     if (!passed1) {
       await dmChannel.send('❌ Incorrect selection or timeout. Verification failed.');
-      return false;
+      return { success: false, dmClosed };
     }
 
     // Phase 2: Numeric code – inline spaced digits
@@ -366,7 +405,7 @@ export async function startDMVerification(member, config) {
     });
     if (!passed2) {
       await dmChannel.send('❌ Incorrect code or timeout. Verification failed.');
-      return false;
+      return { success: false, dmClosed };
     }
 
     // Phase 3: Emoji animal
@@ -386,7 +425,7 @@ export async function startDMVerification(member, config) {
     });
     if (!passed3) {
       await dmChannel.send('❌ Wrong animal or timeout. Verification failed.');
-      return false;
+      return { success: false, dmClosed };
     }
 
     // Finalize via verifyMember and send ID card back in DM
@@ -394,15 +433,17 @@ export async function startDMVerification(member, config) {
     if (result.success) {
       const idCardEmbed = await createEmbed(config, DEFAULT_ID_CARD, 'success', member);
       await dmChannel.send({ embeds: [idCardEmbed] }).catch(() => {});
-      return true;
+      return { success: true, dmClosed };
     } else {
       await dmChannel.send(`❌ Final verification failed: ${result.message || 'unknown error'}`);
-      return false;
+      return { success: false, dmClosed };
     }
   } catch (err) {
     console.error('[Gateway] startDMVerification error:', err);
     try { await member.user.send('⚠️ An error occurred during the lockdown verification process.'); } catch {};
-    return false;
+    return { success: false, dmClosed };
+  } finally {
+    _activeGauntlets.delete(member.id);
   }
 }
 
@@ -417,19 +458,27 @@ export async function startDMVerification(member, config) {
  * @param {Object} config
  */
 export async function startStrictGauntlet(member, config) {
-  if (!member || !member.user) return false;
+  if (!member || !member.user) return { success: false };
+  // race guard
+  if (_activeGauntlets.has(member.id)) return { success: false };
+  _activeGauntlets.set(member.id, 'strict');
+  let dmClosed = false;
   try {
     const user = member.user;
     let dmChannel;
     try {
       dmChannel = await user.createDM();
-    } catch {
-      // fallback via send
-      dmChannel = await user.send('👋 Starting **strict** lockdown verification...')
-        .then(m => m.channel)
-        .catch(() => null);
+    } catch (e) {
+      if (e.code === 50007) dmClosed = true;
+      dmChannel = null;
+      try {
+        dmChannel = await user.send('👋 Starting **strict** lockdown verification...').then(m => m.channel);
+      } catch (sendErr) {
+        if (sendErr.code === 50007) dmClosed = true;
+        dmChannel = null;
+      }
     }
-    if (!dmChannel) return false;
+    if (!dmChannel) return { success: false, dmClosed };
 
     // 1) 15‑second forced delay
     await dmChannel.send('⏳ **Strict Verification:** Please wait 15 seconds before proceeding...');
@@ -460,20 +509,45 @@ export async function startStrictGauntlet(member, config) {
     }
     if (clicked) {
       try { await member.ban({ reason: 'Honeypot clicked during strict verification' }); } catch {};
-      return false;
+      return { success: false, dmClosed };
     }
 
-    // 3) Simple logic test
-    await dmChannel.send('🧠 **Logic Test:** What is **2 + 2**?');
+    // 3) logic/test challenge with timing and reverse word option
+    const tests = [
+      {
+        question: '🧠 **Logic Test:** What is **2 + 2**?',
+        validate: ans => ans.trim() === '4',
+      },
+      {
+        question: "🧠 **Reverse Word:** Type the word **'human'** backwards.",
+        validate: ans => ans.trim().toLowerCase() === 'namuh',
+      },
+    ];
+    const chosen = tests[Math.floor(Math.random() * tests.length)];
+    const startTime = Date.now();
+    await dmChannel.send(chosen.question);
     const passedLogic = await new Promise(resolve => {
       const collector = dmChannel.createMessageCollector({ filter: m => m.author.id === user.id, time: 15000, max: 1 });
-      collector.on('collect', m => resolve(m.content.trim() === '4'));
+      collector.on('collect', m => {
+        const elapsed = Date.now() - startTime;
+        if (elapsed < 1500) {
+          // too fast, likely bot
+          try { member.ban({ reason: 'Bot-like response time during strict verification' }); } catch {};
+          resolve('bot');
+        } else {
+          resolve(chosen.validate(m.content));
+        }
+      });
       collector.on('end', () => resolve(false));
     });
+    if (passedLogic === 'bot') {
+      // already banned
+      return { success: false, dmClosed };
+    }
     if (!passedLogic) {
       try { await member.kick('Failed logic test during strict verification'); } catch {};
       await dmChannel.send('❌ Logic test failed. You have been removed from the server.');
-      return false;
+      return { success: false, dmClosed };
     }
 
     // 4) final verifyMember step (gives roles/ID card similar to DM gauntlet)
@@ -481,16 +555,18 @@ export async function startStrictGauntlet(member, config) {
     if (result.success) {
       const idCardEmbed = await createEmbed(config, DEFAULT_ID_CARD, 'success', member);
       await dmChannel.send({ embeds: [idCardEmbed] }).catch(() => {});
-      return true;
+      return { success: true, dmClosed };
     } else {
       await dmChannel.send(`❌ Final verification failed: ${result.message || 'unknown error'}`);
       try { await member.kick('Final verification failed'); } catch {};
-      return false;
+      return { success: false, dmClosed };
     }
   } catch (err) {
     console.error('[Gateway] startStrictGauntlet error:', err);
     try { await member.user.send('⚠️ An error occurred during the strict lockdown verification process.'); } catch {};
-    return false;
+    return { success: false, dmClosed };
+  } finally {
+    _activeGauntlets.delete(member.id);
   }
 }
 /**
