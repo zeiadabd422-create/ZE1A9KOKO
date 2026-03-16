@@ -134,7 +134,7 @@ export default function GatewayModule(client) {
             if (lockdownResult.lockdown === 2) {
               // Level 2: strict gauntlet, reply with token
               if (interaction.isRepliable()) {
-                await interaction.reply({ content: `🔒 Security Lockdown Active. Check your DMs to complete advanced human verification.\n\n**Token:** \`${lockdownResult.token}\``, ephemeral: true });
+                await interaction.reply({ content: `🔒 Security Lockdown Active. Check your DMs to complete advanced human verification.\n\n**Token:** \`${lockdownResult.token}\`\n⚠️ تنبيه: هذا الرمز ينتهي خلال 90 ثانية.`, ephemeral: true });
               }
             } else {
               // Level 1: simple gauntlet

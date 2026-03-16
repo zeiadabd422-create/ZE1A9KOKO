@@ -30,7 +30,7 @@ const _processingUsers = new Set();
 // ── Track active DM gauntlets (level1/level2) to avoid starting two flows for same user
 // Keys are composite guildId:userId to prevent cross-guild collisions.
 // Value is an object so we can store the current flow type and any inline state (e.g. Level 2 token).
-// { type: 'dm'|'strict', token?: string }
+// { type: 'dm'|'strict', token?: string, createdAt?: number, wrongAttempts?: number }
 const _activeGauntlets = new Map();
 
 /**
@@ -249,6 +249,18 @@ export async function verifyMember(member, config, method) {
       console.error('[Gateway] Failed to create DM embed:', embedErr.message);
     }
 
+    // ── Update verificationTimestamp in Database ──
+    try {
+      if (!config.userStates) config.userStates = new Map();
+      const userState = config.userStates.get(member.id) || {};
+      userState.verificationTimestamp = new Date();
+      config.userStates.set(member.id, userState);
+      await config.save();
+      console.log(`[Gateway] Updated verificationTimestamp for ${member.user.tag || member.id}`);
+    } catch (dbErr) {
+      console.error('[Gateway] Failed to update verificationTimestamp:', dbErr.message);
+    }
+
     return { success: true, message: 'Verification successful', alreadyVerified: false, dmFailed, dmErrorCode };
 
   } catch (err) {
@@ -299,7 +311,7 @@ export async function getLockdownResponse(member, config, method) {
 
       // Check if DMs are open before starting
       try {
-        await member.send({ content: ' ' });
+        await member.user.createDM();
       } catch (err) {
         if (err.code === 50007) return { lockdown: 1, dmFailed: true };
       }
@@ -323,7 +335,7 @@ export async function getLockdownResponse(member, config, method) {
 
       // Check if DMs are open before starting
       try {
-        await member.send({ content: ' ' });
+        await member.user.createDM();
       } catch (err) {
         if (err.code === 50007) return { lockdown: 2, dmFailed: true };
       }
@@ -499,11 +511,22 @@ export async function startStrictGauntlet(member, config, token = null) {
   // race guard (may be pre-set by getLockdownResponse)
   if (_activeGauntlets.has(key)) {
     const entry = _activeGauntlets.get(key);
-    if (entry?.type === 'strict') return { success: false };
+    if (entry?.type === 'strict') {
+      // Check if token expired (90 seconds)
+      if (entry.createdAt && Date.now() - entry.createdAt > 90000) {
+        // Expired: generate new token and clear old state
+        const newToken = generateToken();
+        _activeGauntlets.set(key, { type: 'strict', token: newToken, createdAt: Date.now(), wrongAttempts: 0 });
+        // Update the token for this call
+        token = newToken;
+      } else {
+        return { success: false };
+      }
+    }
   }
 
   // Ensure we have a token stored for the strict gauntlet
-  const activeEntry = { type: 'strict', token: token || generateToken() };
+  const activeEntry = { type: 'strict', token: token || generateToken(), createdAt: Date.now(), wrongAttempts: 0 };
   _activeGauntlets.set(key, activeEntry);
 
   let dmClosed = false;
@@ -540,10 +563,26 @@ export async function startStrictGauntlet(member, config, token = null) {
     });
 
     if (!tokenOk) {
+      // Increment wrong attempts
+      storedEntry.wrongAttempts = (storedEntry.wrongAttempts || 0) + 1;
+      _activeGauntlets.set(key, storedEntry);
+
+      if (storedEntry.wrongAttempts >= 3) {
+        // Cancel gauntlet and kick
+        _activeGauntlets.delete(key);
+        await dmChannel.send('❌ محاولات كثيرة خاطئة. حاول مجدداً من السيرفر.');
+        try { await member.kick('Too many wrong token attempts in strict verification'); } catch {};
+        return { success: false, dmClosed };
+      }
+
       await dmChannel.send('❌ Token mismatch or timeout. Verification failed.');
       try { await member.kick('Failed strict verification token validation'); } catch {};
       return { success: false, dmClosed };
     }
+
+    // Reset wrong attempts on success
+    storedEntry.wrongAttempts = 0;
+    _activeGauntlets.set(key, storedEntry);
 
     // 2) 15‑second mandatory delay
     await dmChannel.send('⏳ **Strict Verification:** Please wait 15 seconds before proceeding...');
@@ -629,14 +668,16 @@ export async function sendVerificationPrompt(channel, config, method) {
   try {
     if (!channel?.send) return { success: false, message: 'Invalid channel' };
 
-    const methodInitial = config.initialMessage?.[method] || {};
-    let title = methodInitial.title || '🔐 Server Verification';
-    let desc  = methodInitial.desc  || 'Click the button below to verify your account.';
-    const image = methodInitial.image || '';
+    // Global promptUI settings as fallback
+    let title = config.promptUI?.title || '🔐 Server Verification';
+    let desc  = config.promptUI?.desc  || 'Click the button below to verify your account.';
+    const image = config.promptUI?.image || '';
 
-    // إعدادات Prompt UI تتغلب على الـ defaults
-    if (config.promptUI?.title) title = config.promptUI.title;
-    if (config.promptUI?.desc)  desc  = config.promptUI.desc;
+    // Per-Method settings MUST overwrite the global promptUI settings
+    const methodInitial = config.initialMessage?.[method] || {};
+    if (methodInitial.title) title = methodInitial.title;
+    if (methodInitial.desc)  desc  = methodInitial.desc;
+    if (methodInitial.image) image = methodInitial.image;
 
     // حل الـ placeholders بسياق الـ guild (بدون member محدد)
     try {
