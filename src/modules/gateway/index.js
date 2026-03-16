@@ -111,6 +111,8 @@ export default function GatewayModule(client) {
         const config = await GatewayConfig.findOne({ guildId: interaction.guildId });
         if (!config?.enabled) return;
 
+        await interaction.deferReply({ ephemeral: true });
+
         let method = null;
         if (interaction.isButton() || interaction.isAnySelectMenu()) {
           method = 'button';
@@ -124,13 +126,13 @@ export default function GatewayModule(client) {
         if (lockdownResult) {
           if (lockdownResult.queueFull) {
             if (interaction.isRepliable()) {
-              await interaction.reply({ content: '⚠️ Wait a moment, the queue is full.', ephemeral: true });
+              await interaction.followUp({ content: '⚠️ Wait a moment, the queue is full.', ephemeral: true });
             }
             return;
           }
           if (lockdownResult.dmFailed) {
             if (interaction.isRepliable()) {
-              await interaction.reply({
+              await interaction.followUp({
                 content: "❌ I cannot DM you. Please enable 'Allow Direct Messages' in your privacy settings and try again.",
                 ephemeral: true,
               });
@@ -140,7 +142,7 @@ export default function GatewayModule(client) {
           if (lockdownResult.already) {
             // already running gauntlet; reply with message
             if (interaction.isRepliable()) {
-              await interaction.reply({ content: "⏳ لديك عملية توثيق نشطة بالفعل في الخاص، يرجى إكمالها.", ephemeral: true });
+              await interaction.followUp({ content: "⏳ لديك عملية توثيق نشطة بالفعل في الخاص، يرجى إكمالها.", ephemeral: true });
             }
             return;
           }
@@ -148,19 +150,19 @@ export default function GatewayModule(client) {
             if (lockdownResult.lockdown === 2) {
               // Level 2: strict gauntlet, reply with token
               if (interaction.isRepliable()) {
-                await interaction.reply({ content: `🔒 Security Lockdown Active. Check your DMs to complete advanced human verification.\n\n**Token:** \`${lockdownResult.token}\`\n⚠️ تنبيه: هذا الرمز ينتهي خلال 90 ثانية.`, ephemeral: true });
+                await interaction.followUp({ content: `🔒 Security Lockdown Active. Check your DMs to complete advanced human verification.\n\n**Token:** \`${lockdownResult.token}\`\n⚠️ تنبيه: هذا الرمز ينتهي خلال 90 ثانية.`, ephemeral: true });
               }
             } else {
               // Level 1: simple gauntlet
               startDMVerification(interaction.member, config).catch(err => console.error('[Gateway] lockdown DM flow error', err));
               if (interaction.isRepliable()) {
-                await interaction.reply({ content: '⚠️ Security Lockdown Active. Check your DMs to complete advanced human verification.', ephemeral: true });
+                await interaction.followUp({ content: '⚠️ Security Lockdown Active. Check your DMs to complete advanced human verification.', ephemeral: true });
               }
             }
             return;
           } else if (lockdownResult.lockdown === 3) {
             if (interaction.isRepliable()) {
-              await interaction.reply({ content: lockdownResult.message, ephemeral: true });
+              await interaction.followUp({ content: lockdownResult.message, ephemeral: true });
             }
             return;
           }
@@ -168,22 +170,22 @@ export default function GatewayModule(client) {
         const result = lockdownResult && !lockdownResult.lockdown ? lockdownResult : await verifyMember(interaction.member, config, method);
         if (result.processing) {
           if (interaction.isRepliable()) {
-            await interaction.reply({ content: '⏳ Please wait...', ephemeral: true }).catch(() => {});
+            await interaction.followUp({ content: '⏳ Please wait...', ephemeral: true }).catch(() => {});
           }
           return;
         }
 
         if (result.alreadyVerified) {
           const embed = await createEmbed(config, result.message, 'alreadyVerified', interaction.member);
-          return interaction.reply({ embeds: [embed] });
+          return interaction.followUp({ embeds: [embed] });
         }
 
         if (result.success) {
           const loadingEmbed = await createEmbed(config, '🔄 Processing...', 'success', interaction.member);
-          await interaction.reply({ embeds: [loadingEmbed] });
+          await interaction.editReply({ embeds: [loadingEmbed] });
           await new Promise(r => setTimeout(r, 2000));
           const idCardEmbed = await createEmbed(config, DEFAULT_ID_CARD, 'success', interaction.member);
-          await interaction.editReply({ embeds: [idCardEmbed] });
+          await interaction.channel.send({ embeds: [idCardEmbed] });
 
           // Auto-Stick: Delete old prompt and re-send
           if (config.methods?.[method]?.promptMessageId) {

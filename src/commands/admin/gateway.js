@@ -187,6 +187,23 @@ export default {
             .setDescription('القناة المخصصة للسجلات الإدارية')
             .setRequired(true)
         )
+    )
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName('lockdown')
+        .setDescription('Set lockdown level for verification')
+        .addIntegerOption(option =>
+          option
+            .setName('level')
+            .setDescription('Lockdown level (0-3)')
+            .setRequired(true)
+            .addChoices(
+              { name: 'Normal (0)', value: 0 },
+              { name: 'DM Verification (1)', value: 1 },
+              { name: 'Strict Gauntlet (2)', value: 2 },
+              { name: 'Closed (3)', value: 3 }
+            )
+        )
     ),
 
   async execute(interaction) {
