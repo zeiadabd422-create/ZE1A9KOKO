@@ -13,7 +13,8 @@ export default function GatewayModule(client) {
         if (message.channelId !== config.methods.trigger.channel) return;
 
         const content = message.content.trim().toLowerCase();
-        if (!checkTriggerWord(content, config.methods.trigger.triggerWord.toLowerCase())) return;
+        const tw = config.methods.trigger.triggerWord ?? '';
+        if (!checkTriggerWord(content, tw.toLowerCase())) return;
 
         // lockdown levels replace the old boolean flag
         const lockdownResult = await getLockdownResponse(message.member, config, 'trigger');
@@ -97,7 +98,7 @@ export default function GatewayModule(client) {
         if (!config?.enabled) return;
 
         let method = null;
-        if (interaction.isButton() || interaction.isSelectMenu()) {
+        if (interaction.isButton() || interaction.isAnySelectMenu()) {
           method = 'button';
           if (!config.methods?.button?.enabled) return;
           if (interaction.channelId !== config.methods.button.channel) return;

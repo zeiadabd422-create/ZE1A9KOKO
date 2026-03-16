@@ -344,7 +344,13 @@ export default {
       } else if (subcommand === 'lockdown') {
         const level = options.getInteger('level', true);
         let cfg = await GatewayConfig.findOne({ guildId: guild.id });
-        if (!cfg) cfg = new GatewayConfig({ guildId: guild.id });
+        if (!cfg) {
+          await interaction.reply({
+            content: '❌ يجب إعداد البوابة أولاً باستخدام /gateway setup قبل تغيير مستوى القفل.',
+            ephemeral: true,
+          });
+          return;
+        }
         cfg.lockdownLevel = level;
         // keep backwards boolean for any legacy checks
         cfg.lockdownMode = level > 0;

@@ -297,6 +297,13 @@ export async function getLockdownResponse(member, config, method) {
         return { lockdown: 1, already: true };
       }
 
+      // Check if DMs are open before starting
+      try {
+        await member.send({ content: ' ' });
+      } catch (err) {
+        if (err.code === 50007) return { lockdown: 1, dmFailed: true };
+      }
+
       // Start the DM flow in the background (async fire-and-forget)
       startDMVerification(member, config).catch(e => console.error('[Gateway] lockdown DM flow error', e));
       return { lockdown: 1 };
@@ -312,6 +319,13 @@ export async function getLockdownResponse(member, config, method) {
       ).length;
       if (strictCount >= 50) {
         return { lockdown: 2, queueFull: true };
+      }
+
+      // Check if DMs are open before starting
+      try {
+        await member.send({ content: ' ' });
+      } catch (err) {
+        if (err.code === 50007) return { lockdown: 2, dmFailed: true };
       }
 
       const token = generateToken();
@@ -511,8 +525,8 @@ export async function startStrictGauntlet(member, config, token = null) {
     if (!dmChannel) return { success: false, dmClosed };
 
     // 1) Token verification (must match the server-displayed token)
-    const activeEntry = _activeGauntlets.get(key) || {};
-    const expectedToken = activeEntry.token;
+    const storedEntry = _activeGauntlets.get(key) || {};
+    const expectedToken = storedEntry.token;
     if (!expectedToken) {
       await dmChannel.send('⚠️ Verification token missing. Please contact an administrator.');
       return { success: false, dmClosed };
