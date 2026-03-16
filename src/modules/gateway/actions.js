@@ -167,7 +167,10 @@ export async function verifyMember(member, config, method) {
     }
 
     // ── هل الـ member محقَّق مسبقاً؟ ──
-    if (!member.roles.cache.has(config.unverifiedRole)) {
+    // Use per-method roles if set, else global
+    const methodVerifiedRole = config.methods?.[method]?.verifiedRole || config.verifiedRole;
+    const methodUnverifiedRole = config.methods?.[method]?.unverifiedRole || config.unverifiedRole;
+    if (!member.roles.cache.has(methodUnverifiedRole)) {
       return {
         success: false,
         message: config.alreadyVerifiedMsg || 'You are already verified in this server!',
@@ -185,22 +188,23 @@ export async function verifyMember(member, config, method) {
     }
 
     // ── تحقق من وجود الرتب في الـ guild قبل المحاولة ──
-    const verifiedRole   = member.guild.roles.cache.get(config.verifiedRole);
-    const unverifiedRole = member.guild.roles.cache.get(config.unverifiedRole);
+    // Use per-method roles if set, else global
+    const verifiedRole   = member.guild.roles.cache.get(methodVerifiedRole);
+    const unverifiedRole = member.guild.roles.cache.get(methodUnverifiedRole);
 
     if (!verifiedRole) {
-      console.error(`[Gateway] CRITICAL: verifiedRole ${config.verifiedRole} not found in guild ${member.guild.id}`);
+      console.error(`[Gateway] CRITICAL: verifiedRole ${methodVerifiedRole} not found in guild ${member.guild.id}`);
       return { success: false, message: 'Verified role not found. Contact an administrator.' };
     }
     if (!unverifiedRole) {
-      console.error(`[Gateway] CRITICAL: unverifiedRole ${config.unverifiedRole} not found in guild ${member.guild.id}`);
+      console.error(`[Gateway] CRITICAL: unverifiedRole ${methodUnverifiedRole} not found in guild ${member.guild.id}`);
       return { success: false, message: 'Unverified role not found. Contact an administrator.' };
     }
 
     // ── Step 1: أضف الـ Verified role أولاً (إذا فشل الحذف بعدين المستخدم مش يضيع) ──
     try {
-      if (!member.roles.cache.has(config.verifiedRole)) {
-        await member.roles.add(config.verifiedRole);
+      if (!member.roles.cache.has(methodVerifiedRole)) {
+        await member.roles.add(methodVerifiedRole);
       }
     } catch (err) {
       return { success: false, message: `Failed to add verified role: ${err.message}` };
@@ -208,8 +212,8 @@ export async function verifyMember(member, config, method) {
 
     // ── Step 2: احذف الـ Unverified role (non-fatal إذا فشل) ──
     try {
-      if (member.roles.cache.has(config.unverifiedRole)) {
-        await member.roles.remove(config.unverifiedRole);
+      if (member.roles.cache.has(methodUnverifiedRole)) {
+        await member.roles.remove(methodUnverifiedRole);
       }
     } catch (err) {
       console.error('[Gateway] Failed to remove unverified role (non-fatal):', err.message);
@@ -259,6 +263,24 @@ export async function verifyMember(member, config, method) {
       console.log(`[Gateway] Updated verificationTimestamp for ${member.user.tag || member.id}`);
     } catch (dbErr) {
       console.error('[Gateway] Failed to update verificationTimestamp:', dbErr.message);
+    }
+
+    // ── Admin Logging ──
+    if (config.adminLogChannel) {
+      try {
+        const logChannel = member.guild.channels.cache.get(config.adminLogChannel);
+        if (logChannel && logChannel.isTextBased()) {
+          const logEmbed = {
+            title: '✅ Member Verified',
+            description: `**Member:** ${member}\n**Method:** ${method}\n**Verified Role:** <@&${methodVerifiedRole}>\n**Unverified Role Removed:** <@&${methodUnverifiedRole}>\n**Timestamp:** <t:${Math.floor(Date.now() / 1000)}:F>`,
+            color: 0x2ecc71,
+            thumbnail: { url: member.user.displayAvatarURL({ extension: 'png', size: 64 }) },
+          };
+          await logChannel.send({ embeds: [logEmbed] });
+        }
+      } catch (logErr) {
+        console.error('[Gateway] Failed to send admin log:', logErr.message);
+      }
     }
 
     return { success: true, message: 'Verification successful', alreadyVerified: false, dmFailed, dmErrorCode };
@@ -715,9 +737,8 @@ export async function sendVerificationPrompt(channel, config, method) {
       embed.description += `\n\n**Trigger Word:** \`${config.methods.trigger.triggerWord}\``;
     }
 
-    await channel.send(payload);
-    return { success: true };
+    const sentMessage = await channel.send(payload);
+    return { success: true, message: sentMessage };
   } catch (err) {
     return { success: false, message: `Failed to send prompt: ${err.message}` };
-  }
-}
+  }}

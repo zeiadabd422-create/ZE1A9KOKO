@@ -71,6 +71,20 @@ export default function GatewayModule(client) {
           await new Promise(r => setTimeout(r, 2000));
           const idCardEmbed = await createEmbed(config, DEFAULT_ID_CARD, 'success', message.member);
           await loadingMsg.edit({ embeds: [idCardEmbed] });
+
+          // Auto-Stick: Delete old prompt and re-send
+          if (config.methods?.trigger?.promptMessageId) {
+            try {
+              const oldMsg = await message.channel.messages.fetch(config.methods.trigger.promptMessageId).catch(() => null);
+              if (oldMsg && oldMsg.deletable) await oldMsg.delete().catch(() => {});
+            } catch (_e) {}
+            const newPrompt = await sendVerificationPrompt(message.channel, config, 'trigger');
+            if (newPrompt.success && newPrompt.message?.id) {
+              config.methods.trigger.promptMessageId = newPrompt.message.id;
+              await config.save();
+            }
+          }
+
           return;
         }
 
@@ -170,6 +184,21 @@ export default function GatewayModule(client) {
           await new Promise(r => setTimeout(r, 2000));
           const idCardEmbed = await createEmbed(config, DEFAULT_ID_CARD, 'success', interaction.member);
           await interaction.editReply({ embeds: [idCardEmbed] });
+
+          // Auto-Stick: Delete old prompt and re-send
+          if (config.methods?.[method]?.promptMessageId) {
+            try {
+              const channel = interaction.channel;
+              const oldMsg = await channel.messages.fetch(config.methods[method].promptMessageId).catch(() => null);
+              if (oldMsg && oldMsg.deletable) await oldMsg.delete().catch(() => {});
+            } catch (_e) {}
+            const newPrompt = await sendVerificationPrompt(interaction.channel, config, method);
+            if (newPrompt.success && newPrompt.message?.id) {
+              config.methods[method].promptMessageId = newPrompt.message.id;
+              await config.save();
+            }
+          }
+
           return;
         }
 
@@ -198,7 +227,9 @@ export default function GatewayModule(client) {
       channelId = '',
       triggerWord = '',
       verifiedRoleId,
-      unverifiedRoleId
+      unverifiedRoleId,
+      methodVerifiedRoleId = '',
+      methodUnverifiedRoleId = ''
     ) {
       try {
         const opts = { upsert: true, new: true, setDefaultsOnInsert: true };
@@ -216,6 +247,8 @@ export default function GatewayModule(client) {
         if (method === 'trigger' && triggerWord !== undefined) {
           cfg.methods.trigger.triggerWord = triggerWord;
         }
+        if (methodVerifiedRoleId) cfg.methods[method].verifiedRole = methodVerifiedRoleId;
+        if (methodUnverifiedRoleId) cfg.methods[method].unverifiedRole = methodUnverifiedRoleId;
 
         cfg.enabled = true;
         await cfg.save();
@@ -225,7 +258,11 @@ export default function GatewayModule(client) {
           try {
             const chan = await client.channels.fetch(channelId).catch(() => null);
             if (chan && chan.isTextBased()) {
-              await sendVerificationPrompt(chan, cfg, method);
+              const result = await sendVerificationPrompt(chan, cfg, method);
+              if (result.success && result.message?.id) {
+                cfg.methods[method].promptMessageId = result.message.id;
+                await cfg.save();
+              }
             }
           } catch (_e) {}
         }

@@ -53,6 +53,18 @@ export default {
             .setDescription('الرتبة غير الموثقة أو العقوبة المزالة (مطلوبة للإعداد الأولي)')
             .setRequired(false)
         )
+        .addRoleOption(option =>
+          option
+            .setName('method_verified_role')
+            .setDescription('الرتبة الموثقة الخاصة بهذه الطريقة (اختياري، يتجاوز الرتبة العامة)')
+            .setRequired(false)
+        )
+        .addRoleOption(option =>
+          option
+            .setName('method_unverified_role')
+            .setDescription('الرتبة غير الموثقة الخاصة بهذه الطريقة (اختياري، يتجاوز الرتبة العامة)')
+            .setRequired(false)
+        )
     )
     .addSubcommand(subcommand =>
       subcommand
@@ -135,6 +147,18 @@ export default {
             .setDescription('الرتبة غير الموثقة المراد إزالتها')
             .setRequired(false)
         )
+        .addRoleOption(option =>
+          option
+            .setName('method_verified_role')
+            .setDescription('الرتبة الموثقة الخاصة بهذه الطريقة')
+            .setRequired(false)
+        )
+        .addRoleOption(option =>
+          option
+            .setName('method_unverified_role')
+            .setDescription('الرتبة غير الموثقة الخاصة بهذه الطريقة')
+            .setRequired(false)
+        )
         .addStringOption(option =>
           option
             .setName('prompt_title')
@@ -155,19 +179,13 @@ export default {
     )
     .addSubcommand(subcommand =>
       subcommand
-        .setName('lockdown')
-        .setDescription('تحديد مستوى القفل (0-3)')
-        .addIntegerOption(option =>
+        .setName('set_admin_log')
+        .setDescription('تحديد قناة السجل الإداري لعمليات التوثيق')
+        .addChannelOption(option =>
           option
-            .setName('level')
-            .setDescription('مستوى الحماية المطلوبة (0-3)')
+            .setName('channel')
+            .setDescription('القناة المخصصة للسجلات الإدارية')
             .setRequired(true)
-            .addChoices(
-              { name: '0 – Normal', value: 0 },
-              { name: '1 – Simple Gauntlet', value: 1 },
-              { name: '2 – Strict Gauntlet', value: 2 },
-              { name: '3 – System Closed', value: 3 }
-            )
         )
     ),
 
@@ -199,6 +217,8 @@ export default {
         const triggerWord = options.getString('trigger_word') || '';
         const verifiedRole = options.getRole('verified_role');
         const unverifiedRole = options.getRole('unverified_role');
+        const methodVerifiedRole = options.getRole('method_verified_role');
+        const methodUnverifiedRole = options.getRole('method_unverified_role');
 
         // Validate: methods other than 'join' require a channel
         if (!channel) {
@@ -224,7 +244,9 @@ export default {
           channel?.id || '',
           triggerWord,
           verifiedRole?.id,
-          unverifiedRole?.id
+          unverifiedRole?.id,
+          methodVerifiedRole?.id || '',
+          methodUnverifiedRole?.id || ''
         );
 
         if (result.success) {
@@ -237,8 +259,10 @@ export default {
           const details = [];
           if (channel) details.push(`**Channel:** <#${channel.id}>`);
           if (triggerWord) details.push(`**Trigger Word:** \`${triggerWord}\``);
-          if (verifiedRole) details.push(`**Verified Role:** <@&${verifiedRole.id}>`);
-          if (unverifiedRole) details.push(`**Unverified Role:** <@&${unverifiedRole.id}>`);
+          if (verifiedRole) details.push(`**Global Verified Role:** <@&${verifiedRole.id}>`);
+          if (unverifiedRole) details.push(`**Global Unverified Role:** <@&${unverifiedRole.id}>`);
+          if (methodVerifiedRole) details.push(`**Method Verified Role:** <@&${methodVerifiedRole.id}>`);
+          if (methodUnverifiedRole) details.push(`**Method Unverified Role:** <@&${methodUnverifiedRole.id}>`);
 
           await interaction.reply({
             content: `✅ **${methodNames[method]}** method configured!\n\n${details.join('\n')}${channel ? '\n✉️ Verification message sent to channel.' : ''}`,
@@ -250,6 +274,25 @@ export default {
             ephemeral: true,
           });
         }
+      } else if (subcommand === 'set_admin_log') {
+        const channel = options.getChannel('channel', true);
+
+        let cfg = await GatewayConfig.findOne({ guildId: guild.id });
+        if (!cfg) {
+          await interaction.reply({
+            content: '❌ يجب إعداد البوابة أولاً باستخدام /gateway setup قبل تحديد قناة السجل.',
+            ephemeral: true,
+          });
+          return;
+        }
+
+        cfg.adminLogChannel = channel.id;
+        await cfg.save();
+
+        await interaction.reply({
+          content: `✅ Admin log channel set to <#${channel.id}>.`,
+          ephemeral: true,
+        });
       } else if (subcommand === 'customize_ui') {
         const page = options.getString('page', true);
         const title = options.getString('title');
@@ -366,6 +409,8 @@ export default {
         const triggerWord = options.getString('trigger_word');
         const verifiedRole = options.getRole('verified_role');
         const unverifiedRole = options.getRole('unverified_role');
+        const methodVerifiedRole = options.getRole('method_verified_role');
+        const methodUnverifiedRole = options.getRole('method_unverified_role');
         const promptTitle = options.getString('prompt_title');
         const promptDesc = options.getString('prompt_description');
 
@@ -373,21 +418,25 @@ export default {
         let overallSuccess = true;
 
         // if any logic-related options were provided, update via setupMethod
-        if (channelOpt || triggerWord || verifiedRole || unverifiedRole) {
+        if (channelOpt || triggerWord || verifiedRole || unverifiedRole || methodVerifiedRole || methodUnverifiedRole) {
           const res1 = await client.gateway.setupMethod(
             guild.id,
             method,
             channelOpt?.id || '',
             triggerWord || '',
             verifiedRole?.id,
-            unverifiedRole?.id
+            unverifiedRole?.id,
+            methodVerifiedRole?.id || '',
+            methodUnverifiedRole?.id || ''
           );
           if (res1.success) {
             const details = [];
             if (channelOpt) details.push(`Channel → <#${channelOpt.id}>`);
             if (triggerWord) details.push(`Trigger Word → \`${triggerWord}\``);
-            if (verifiedRole) details.push(`Verified Role → <@&${verifiedRole.id}>`);
-            if (unverifiedRole) details.push(`Unverified Role → <@&${unverifiedRole.id}>`);
+            if (verifiedRole) details.push(`Global Verified Role → <@&${verifiedRole.id}>`);
+            if (unverifiedRole) details.push(`Global Unverified Role → <@&${unverifiedRole.id}>`);
+            if (methodVerifiedRole) details.push(`Method Verified Role → <@&${methodVerifiedRole.id}>`);
+            if (methodUnverifiedRole) details.push(`Method Unverified Role → <@&${methodUnverifiedRole.id}>`);
             replyParts.push(`⚙️ Logic updated: ${details.join(', ')}`);
           } else {
             overallSuccess = false;
@@ -436,18 +485,24 @@ export default {
 
         const embed = new EmbedBuilder()
           .setColor(0x4f3ff0)
-          .setTitle('🔐 Gateway Verification Status')
-          .setDescription('All configured verification methods');
+          .setTitle('🔐 Gateway Verification Dashboard')
+          .setDescription('Complete verification system status');
 
         const methodsList = [];
         if (config.methods?.button?.enabled) {
-          methodsList.push(`🔘 **Button** - <#${config.methods.button.channel}>`);
+          const vRole = config.methods.button.verifiedRole ? `<@&${config.methods.button.verifiedRole}>` : `<@&${config.verifiedRole}> (global)`;
+          const uRole = config.methods.button.unverifiedRole ? `<@&${config.methods.button.unverifiedRole}>` : `<@&${config.unverifiedRole}> (global)`;
+          methodsList.push(`🔘 **Button**\n└ Channel: <#${config.methods.button.channel}>\n└ Verified: ${vRole}\n└ Unverified: ${uRole}`);
         }
         if (config.methods?.trigger?.enabled) {
-          methodsList.push(`💬 **Trigger** - <#${config.methods.trigger.channel}> (word: \`${config.methods.trigger.triggerWord}\`)`);
+          const vRole = config.methods.trigger.verifiedRole ? `<@&${config.methods.trigger.verifiedRole}>` : `<@&${config.verifiedRole}> (global)`;
+          const uRole = config.methods.trigger.unverifiedRole ? `<@&${config.methods.trigger.unverifiedRole}>` : `<@&${config.unverifiedRole}> (global)`;
+          methodsList.push(`💬 **Trigger**\n└ Channel: <#${config.methods.trigger.channel}>\n└ Word: \`${config.methods.trigger.triggerWord}\`\n└ Verified: ${vRole}\n└ Unverified: ${uRole}`);
         }
         if (config.methods?.slash?.enabled) {
-          methodsList.push(`⚡ **Slash (/verify)** - <#${config.methods.slash.channel}>`);
+          const vRole = config.methods.slash.verifiedRole ? `<@&${config.methods.slash.verifiedRole}>` : `<@&${config.verifiedRole}> (global)`;
+          const uRole = config.methods.slash.unverifiedRole ? `<@&${config.methods.slash.unverifiedRole}>` : `<@&${config.unverifiedRole}> (global)`;
+          methodsList.push(`⚡ **Slash (/verify)**\n└ Channel: <#${config.methods.slash.channel}>\n└ Verified: ${vRole}\n└ Unverified: ${uRole}`);
         }
         if (config.methods?.join?.enabled) {
           methodsList.push(`✨ **Join** - Automatic on member join`);
@@ -456,12 +511,17 @@ export default {
         embed.addFields(
           {
             name: '🔄 Active Methods',
-            value: methodsList.length > 0 ? methodsList.join('\n') : 'No methods configured',
+            value: methodsList.length > 0 ? methodsList.join('\n\n') : 'No methods configured',
             inline: false,
           },
-          { name: '✅ Verified Role', value: `<@&${config.verifiedRole}>`, inline: true },
-          { name: '❌ Unverified Role', value: `<@&${config.unverifiedRole}>`, inline: true }
+          { name: '🏠 Global Verified Role', value: `<@&${config.verifiedRole}>`, inline: true },
+          { name: '🚫 Global Unverified Role', value: `<@&${config.unverifiedRole}>`, inline: true },
+          { name: '🔒 Lockdown Level', value: `${config.lockdownLevel || 0} (${['Normal', 'Simple Gauntlet', 'Strict Gauntlet', 'System Closed'][config.lockdownLevel] || 'Unknown'})`, inline: true }
         );
+
+        if (config.adminLogChannel) {
+          embed.addFields({ name: '📋 Admin Log Channel', value: `<#${config.adminLogChannel}>`, inline: true });
+        }
         
         // show configured initial prompts if available
         const promptLines = [];
@@ -477,7 +537,7 @@ export default {
           embed.addFields({ name: '✉️ Custom Prompts', value: promptLines.join('\n'), inline: false });
         }
 
-        embed.setFooter({ text: 'Use /gateway setup to add methods, /gateway customize_ui to style responses' })
+        embed.setFooter({ text: 'Use /gateway setup to configure methods | /gateway set_admin_log for logging' })
           .setTimestamp();
 
         await interaction.reply({

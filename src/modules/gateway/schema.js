@@ -8,7 +8,13 @@ const GatewaySchema = new mongoose.Schema(
       unique: true,
       index: true,
     },
-    // Core roles for all methods
+    // Admin log channel for verification logs
+    adminLogChannel: {
+      type: String,
+      default: '',
+      description: 'Channel ID for admin verification logs',
+    },
+    // Core roles for all methods (global fallback)
     verifiedRole: {
       type: String,
       required: true,
@@ -25,15 +31,24 @@ const GatewaySchema = new mongoose.Schema(
       button: {
         enabled: { type: Boolean, default: false },
         channel: { type: String, default: '' },
+        verifiedRole: { type: String, default: '' }, // per-method role
+        unverifiedRole: { type: String, default: '' }, // per-method role
+        promptMessageId: { type: String, default: '' }, // for auto-stick interface
       },
       trigger: {
         enabled: { type: Boolean, default: false },
         channel: { type: String, default: '' },
         triggerWord: { type: String, default: '' },
+        verifiedRole: { type: String, default: '' }, // per-method role
+        unverifiedRole: { type: String, default: '' }, // per-method role
+        promptMessageId: { type: String, default: '' }, // for auto-stick interface
       },
       slash: {
         enabled: { type: Boolean, default: false },
         channel: { type: String, default: '' },
+        verifiedRole: { type: String, default: '' }, // per-method role
+        unverifiedRole: { type: String, default: '' }, // per-method role
+        promptMessageId: { type: String, default: '' }, // for auto-stick interface
       },
       // join method removed; onboarding handled by Welcome module
     },
