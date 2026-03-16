@@ -1,6 +1,6 @@
 import GatewayConfig from './schema.js';
 import { checkTriggerWord } from './checker.js';
-import { verifyMember, createEmbed, startDMVerification, DEFAULT_ID_CARD, getLockdownResponse } from './actions.js';
+import { verifyMember, createEmbed, startDMVerification, startStrictGauntlet, DEFAULT_ID_CARD, getLockdownResponse, sendVerificationPrompt } from './actions.js';
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 
 export default function GatewayModule(client) {
@@ -123,13 +123,24 @@ export default function GatewayModule(client) {
             return;
           }
           if (lockdownResult.already) {
-            // ignore duplicate start
+            // already running gauntlet; reply with message
+            if (interaction.isRepliable()) {
+              await interaction.reply({ content: "⏳ لديك عملية توثيق نشطة بالفعل في الخاص، يرجى إكمالها.", ephemeral: true });
+            }
             return;
           }
           if (lockdownResult.lockdown === 1 || lockdownResult.lockdown === 2) {
-            startDMVerification(interaction.member, config).catch(err => console.error('[Gateway] lockdown DM flow error', err));
-            if (interaction.isRepliable()) {
-              await interaction.reply({ content: '⚠️ Security Lockdown Active. Check your DMs to complete advanced human verification.', ephemeral: true });
+            if (lockdownResult.lockdown === 2) {
+              // Level 2: strict gauntlet, reply with token
+              if (interaction.isRepliable()) {
+                await interaction.reply({ content: `🔒 Security Lockdown Active. Check your DMs to complete advanced human verification.\n\n**Token:** \`${lockdownResult.token}\``, ephemeral: true });
+              }
+            } else {
+              // Level 1: simple gauntlet
+              startDMVerification(interaction.member, config).catch(err => console.error('[Gateway] lockdown DM flow error', err));
+              if (interaction.isRepliable()) {
+                await interaction.reply({ content: '⚠️ Security Lockdown Active. Check your DMs to complete advanced human verification.', ephemeral: true });
+              }
             }
             return;
           } else if (lockdownResult.lockdown === 3) {
@@ -213,18 +224,7 @@ export default function GatewayModule(client) {
           try {
             const chan = await client.channels.fetch(channelId).catch(() => null);
             if (chan && chan.isTextBased()) {
-              const embed = await createEmbed(cfg, '', 'prompt');
-              const msgOptions = { embeds: [embed] };
-              if (method === 'button') {
-                const row = new ActionRowBuilder().addComponents(
-                  new ButtonBuilder()
-                    .setCustomId('gateway_verify')
-                    .setLabel('Verify')
-                    .setStyle(ButtonStyle.Primary)
-                );
-                msgOptions.components = [row];
-              }
-              await chan.send(msgOptions).catch(() => {});
+              await sendVerificationPrompt(chan, cfg, method);
             }
           } catch (_e) {}
         }

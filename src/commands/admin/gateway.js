@@ -13,15 +13,15 @@ const _uiPreviewMap = new Map();
 export default {
   data: new SlashCommandBuilder()
     .setName('gateway')
-    .setDescription('Configure and manage gateway verification (supports button, trigger, slash)')
+    .setDescription('إدارة وتكوين نظام التوثيق (يدعم الزر، الكلمة المحفزة، الأمر المائل)')
     .addSubcommand(subcommand =>
       subcommand
         .setName('setup')
-        .setDescription('Setup or update a verification method (can add multiple)')
+        .setDescription('إعداد قناة التوثيق والرسالة الأولية')
         .addStringOption(option =>
           option
             .setName('method')
-            .setDescription('Verification method to configure')
+            .setDescription('طريقة التوثيق المراد تكوينها')
             .setRequired(true)
             .addChoices(
               { name: 'Button', value: 'button' },
@@ -32,36 +32,36 @@ export default {
         .addChannelOption(option =>
           option
             .setName('channel')
-            .setDescription('Channel for this method (required for button, trigger, slash)')
+            .setDescription('القناة المخصصة لهذه الطريقة (مطلوبة للزر والكلمة المحفزة والأمر المائل)')
             .setRequired(false)
         )
         .addStringOption(option =>
           option
             .setName('trigger_word')
-            .setDescription('Trigger word (only used for trigger method)')
+            .setDescription('الكلمة المحفزة (لطريقة الكلمة المحفزة فقط)')
             .setRequired(false)
         )
         .addRoleOption(option =>
           option
             .setName('verified_role')
-            .setDescription('Role to give verified users (required for initial setup)')
+            .setDescription('الرتبة الممنوحة للمستخدمين الموثقين (مطلوبة للإعداد الأولي)')
             .setRequired(false)
         )
         .addRoleOption(option =>
           option
             .setName('unverified_role')
-            .setDescription('Unverified/penalty role to remove (required for initial setup)')
+            .setDescription('الرتبة غير الموثقة أو العقوبة المزالة (مطلوبة للإعداد الأولي)')
             .setRequired(false)
         )
     )
     .addSubcommand(subcommand =>
       subcommand
         .setName('customize_ui')
-        .setDescription('Customize appearance of verification pages and messages')
+        .setDescription('تخصيص مظهر صفحات التوثيق والرسائل')
         .addStringOption(option =>
           option
             .setName('page')
-            .setDescription('Which page/message to customize')
+            .setDescription('الصفحة أو الرسالة المراد تخصيصها')
             .setRequired(true)
             .addChoices(
               { name: 'Success (Response)', value: 'success' },
@@ -74,36 +74,36 @@ export default {
         .addStringOption(option =>
           option
             .setName('title')
-            .setDescription('Embed title')
+            .setDescription('عنوان الرسالة المضمنة')
             .setRequired(false)
         )
         .addStringOption(option =>
           option
             .setName('desc')
-            .setDescription('Embed description')
+            .setDescription('وصف الرسالة المضمنة')
             .setRequired(false)
         )
         .addStringOption(option =>
           option
             .setName('color')
-            .setDescription('Hex color code (e.g., #2ecc71)')
+            .setDescription('رمز اللون السداسي العشري (مثال: #2ecc71)')
             .setRequired(false)
         )
         .addStringOption(option =>
           option
             .setName('image_url')
-            .setDescription('Banner image URL')
+            .setDescription('رابط صورة البانر')
             .setRequired(false)
         )
     )
     .addSubcommand(subcommand =>
       subcommand
         .setName('customize_logic')
-        .setDescription('Configure or tweak verification logic and roles')
+        .setDescription('تكوين منطق التوثيق والأدوار')
         .addStringOption(option =>
           option
             .setName('method')
-            .setDescription('Which method to customize prompts for or update settings on')
+            .setDescription('الطريقة المراد تخصيص الرسائل الأولية لها أو تحديث الإعدادات عليها')
             .setRequired(true)
             .addChoices(
               { name: 'Button', value: 'button' },
@@ -114,53 +114,53 @@ export default {
         .addChannelOption(option =>
           option
             .setName('channel')
-            .setDescription('Change the channel associated with this method')
+            .setDescription('تغيير القناة المرتبطة بهذه الطريقة')
             .setRequired(false)
         )
         .addStringOption(option =>
           option
             .setName('trigger_word')
-            .setDescription('Trigger word (only for trigger method)')
+            .setDescription('الكلمة المحفزة (لطريقة الكلمة المحفزة فقط)')
             .setRequired(false)
         )
         .addRoleOption(option =>
           option
             .setName('verified_role')
-            .setDescription('Verified role to assign')
+            .setDescription('الرتبة الموثقة المراد منحها')
             .setRequired(false)
         )
         .addRoleOption(option =>
           option
             .setName('unverified_role')
-            .setDescription('Unverified role to remove')
+            .setDescription('الرتبة غير الموثقة المراد إزالتها')
             .setRequired(false)
         )
         .addStringOption(option =>
           option
             .setName('prompt_title')
-            .setDescription('Title for the initial verification message/prompt')
+            .setDescription('العنوان للرسالة الأولية للتوثيق')
             .setRequired(false)
         )
         .addStringOption(option =>
           option
             .setName('prompt_description')
-            .setDescription('Description for the initial verification message/prompt')
+            .setDescription('الوصف للرسالة الأولية للتوثيق')
             .setRequired(false)
         )
     )
     .addSubcommand(subcommand =>
       subcommand
         .setName('status')
-        .setDescription('Display all configured methods and settings')
+        .setDescription('عرض جميع الطرق المكونة والإعدادات')
     )
     .addSubcommand(subcommand =>
       subcommand
         .setName('lockdown')
-        .setDescription('Set lockdown level (0‑3)')
+        .setDescription('تحديد مستوى القفل (0-3)')
         .addIntegerOption(option =>
           option
             .setName('level')
-            .setDescription('0 = normal, 1 = simple, 2 = strict, 3 = closed')
+            .setDescription('مستوى الحماية المطلوبة (0-3)')
             .setRequired(true)
             .addChoices(
               { name: '0 – Normal', value: 0 },
