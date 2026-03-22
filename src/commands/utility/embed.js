@@ -5,7 +5,7 @@ export default {
     .setName('embed')
     .setDescription('إدارة خزنة الإيمبد')
     .addSubcommand(subcommand =>
-      subcommand.setName('manager').setDescription('فتح لوحة إدارة الإيمبد').setDescriptionLocalizations({ ar: 'فتح لوحة إدارة الإيمبد' })
+      subcommand.setName('manager').setDescription('فتح لوحة إدارة الإيمبد')
     )
     .addSubcommand(subcommand =>
       subcommand.setName('vault').setDescription('Open vault selector with all saved embeds')
