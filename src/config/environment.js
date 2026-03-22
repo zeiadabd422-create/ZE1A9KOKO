@@ -7,6 +7,7 @@ export const env = {
     GUILD_ID: process.env.GUILD_ID || '',
     SESSION_SECRET: process.env.SESSION_SECRET || '',
     MONGO_URI: process.env.MONGO_URI || 'mongodb://localhost:27017/guardian',
+    PORT: parseInt(process.env.PORT || '5000', 10),
 };
 
 if (!env.DISCORD_TOKEN) {

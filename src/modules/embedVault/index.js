@@ -81,9 +81,11 @@ export default function EmbedVaultModule(client) {
             .setStyle(ButtonStyle.Secondary)
         );
 
+        const menuRow = new ActionRowBuilder().addComponents(menu);
+
         return interaction.reply({
           content: `**Embed Manager** - ${embeds.length} embeds in vault\nSelect an embed to edit, or create a new one.`,
-          components: [menu, actionRow],
+          components: [menuRow, actionRow],
           ephemeral: true,
         });
       } catch (err) {

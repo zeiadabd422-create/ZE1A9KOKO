@@ -11,6 +11,7 @@ import loadModules from './loaders/modules.js';
 import loadEvents from './loaders/events.js';
 import loadCommands from './loaders/commands.js';
 import TaskScheduler from './core/TaskScheduler.js';
+import { startApi } from './api.js';
 
 // 1. تحميل الإعدادات فوراً
 dotenv.config();
@@ -72,6 +73,9 @@ async function bootstrap() {
     await loadEvents(client);
     await loadCommands(client);
     console.log('[3/4] LOADERS: All systems loaded.');
+
+    // تشغيل الـ API Server
+    startApi();
 
     // د. تسجيل الدخول
     await client.login(process.env.DISCORD_TOKEN);
