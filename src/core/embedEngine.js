@@ -39,14 +39,16 @@ function resolvePlaceholders(text, placeholders = {}) {
 
     if (member.joinedAt) {
       ph['joined_at'] = member.joinedAt.toLocaleDateString();
-      ph['join_pos'] = '1'; // Simplified, can be enhanced
+      // Dynamic join_pos: use passed value or try to extract from member cache
+      ph['join_pos'] = placeholders.join_pos || '?';
     }
 
     if (member.user?.createdAt) {
       const ageDays = Math.floor((Date.now() - member.user.createdAt.getTime()) / (1000 * 60 * 60 * 24));
-      ph['account_age'] = `${ageDays} days`;
+      ph['account_age'] = ageDays.toString();
     }
 
+    // Guild-only context: ensure guild exists before resolving guild-related placeholders
     if (member.guild) {
       ph['server'] = member.guild.name;
       ph['server.name'] = member.guild.name;

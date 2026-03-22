@@ -237,21 +237,22 @@ export default function WelcomeModule(client) {
 
         const fields = interaction.fields;
         if (section === 'basicinfo') {
-          embedConfig.title = fields.getTextInputValue('title') || embedConfig.title;
-          embedConfig.description = fields.getTextInputValue('description') || embedConfig.description;
-          embedConfig.color = fields.getTextInputValue('color') || embedConfig.color;
-          embedConfig.thumbnail_url = fields.getTextInputValue('thumbnail_url') || embedConfig.thumbnail_url;
+          embedConfig.title = fields.getTextInputValue('title');
+          embedConfig.description = fields.getTextInputValue('description');
+          embedConfig.color = fields.getTextInputValue('color');
+          embedConfig.thumbnail_url = fields.getTextInputValue('thumbnail_url');
         } else if (section === 'author') {
-          embedConfig.author_name = fields.getTextInputValue('author_name') || embedConfig.author_name;
-          embedConfig.author_icon = fields.getTextInputValue('author_icon') || embedConfig.author_icon;
+          embedConfig.author_name = fields.getTextInputValue('author_name');
+          embedConfig.author_icon = fields.getTextInputValue('author_icon');
         } else if (section === 'footer') {
-          embedConfig.footer_text = fields.getTextInputValue('footer_text') || embedConfig.footer_text;
-          embedConfig.footer_image_url = fields.getTextInputValue('footer_image_url') || embedConfig.footer_image_url;
+          embedConfig.footer_text = fields.getTextInputValue('footer_text');
+          embedConfig.footer_image_url = fields.getTextInputValue('footer_image_url');
         } else if (section === 'images') {
-          embedConfig.image_url = fields.getTextInputValue('image_url') || embedConfig.image_url;
+          embedConfig.image_url = fields.getTextInputValue('image_url');
         }
 
         cfg[key] = embedConfig;
+        cfg.markModified(key);
         await cfg.save();
         await interaction.reply({ content: '✅ Updated.', ephemeral: true });
       } catch (err) {
