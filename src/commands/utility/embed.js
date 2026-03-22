@@ -19,15 +19,15 @@ export default {
         .setName('save')
         .setDescription('Save or overwrite embed into vault')
         .addStringOption(option => option.setName('name').setDescription('Vault embed name').setRequired(true))
-        .addStringOption(option => option.setName('title').setDescription('Embed title').setRequired(false))
-        .addStringOption(option => option.setName('description').setDescription('Embed description').setRequired(false))
-        .addStringOption(option => option.setName('image').setDescription('Embed image URL').setRequired(false))
         .addStringOption(option => option.setName('category').setDescription('Embed category').setRequired(true).addChoices(
           { name: 'Welcome', value: 'Welcome' },
           { name: 'Leave', value: 'Leave' },
           { name: 'Boost', value: 'Boost' },
           { name: 'Manual', value: 'Manual' }
         ))
+        .addStringOption(option => option.setName('title').setDescription('Embed title').setRequired(false))
+        .addStringOption(option => option.setName('description').setDescription('Embed description').setRequired(false))
+        .addStringOption(option => option.setName('image').setDescription('Embed image URL').setRequired(false))
     )
     .addSubcommand(subcommand =>
       subcommand
