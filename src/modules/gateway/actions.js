@@ -9,7 +9,6 @@ import { validateRaidShield } from './checker.js';
 import { parseColor } from '../../utils/parseColor.js';
 import { render as renderEmbed } from '../../core/embedEngine.js';
 import { BoundedMap } from '../../utils/cache.js';
-import { parsePlaceholders } from '../../utils/placeholders.js';
 
 // ── Cache: embeds ثابتة تُخزَّن، embeds ديناميكية (ID Card) لا تُخزَّن أبداً
 const embedCache = new BoundedMap(100);
@@ -96,26 +95,18 @@ export async function createEmbed(config, overrideMsg = '', pageKey = '', member
     template = pageMap[pageKey] || {};
   }
 
-  const data = await renderEmbed(template, member);
+  const data = renderEmbed(template, member ? { member } : {});
 
   if (data?.error === 'EMBED_DESCRIPTION_TOO_LONG') {
     throw new Error('EMBED_DESCRIPTION_TOO_LONG');
   }
 
-  // resolve placeholders in the template itself (title/description) when we have a member
-  if (member && data) {
-    if (data.title) {
-      data.title = await parsePlaceholders(data.title, member);
-    }
-    if (data.description) {
-      data.description = await parsePlaceholders(data.description, member);
-    }
-  }
+  // The new render function already handles placeholders, so no need for additional parsing
 
   // حل الـ placeholders في الـ override message
   if (overrideMsg && data) {
     data.description = member
-      ? await parsePlaceholders(overrideMsg, member)
+      ? renderEmbed({ description: overrideMsg }, { member }).description
       : overrideMsg;
   }
 
@@ -704,8 +695,10 @@ export async function sendVerificationPrompt(channel, config, method) {
     // حل الـ placeholders بسياق الـ guild (بدون member محدد)
     try {
       const guildCtx = { guild: channel.guild };
-      title = await parsePlaceholders(title, guildCtx);
-      desc  = await parsePlaceholders(desc,  guildCtx);
+      const renderedTitle = renderEmbed({ title }, guildCtx);
+      const renderedDesc = renderEmbed({ description: desc }, guildCtx);
+      title = renderedTitle.title;
+      desc = renderedDesc.description;
     } catch (_e) {}
 
     const embed = {

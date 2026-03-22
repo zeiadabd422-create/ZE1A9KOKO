@@ -79,7 +79,7 @@ export default {
           }
 
           // Check if EmbedVault module handles this modal
-          if (interaction.customId.startsWith('embedvault_modal') && client.embedVault && typeof client.embedVault.handleModalSubmit === 'function') {
+          if (interaction.customId.startsWith('embedvault_') && client.embedVault && typeof client.embedVault.handleModalSubmit === 'function') {
             await client.embedVault.handleModalSubmit(interaction);
             return;
           }
