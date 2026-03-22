@@ -1,46 +1,62 @@
-import { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
+import { SlashCommandBuilder, ActionRowBuilder, StringSelectMenuBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 
 export default {
   data: new SlashCommandBuilder()
     .setName('embed')
-    .setDescription('Embed Vault management')
+    .setDescription('إدارة خزنة الإيمبد')
+    .addSubcommand(subcommand =>
+      subcommand.setName('manager').setDescription('فتح لوحة إدارة الإيمبد').setDescriptionLocalizations({ ar: 'فتح لوحة إدارة الإيمبد' })
+    )
     .addSubcommand(subcommand =>
       subcommand.setName('vault').setDescription('Open vault selector with all saved embeds')
     )
     .addSubcommand(subcommand =>
       subcommand
         .setName('send')
-        .setDescription('Send a vault embed to the channel')
-        .addStringOption(option => option.setName('name').setDescription('Vault embed name').setRequired(true))
-        .addChannelOption(option => option.setName('channel').setDescription('Target channel to send embed').setRequired(true))
+        .setDescription('إرسال إيمبد من الخزنة')
+        .addStringOption(option => option.setName('name').setDescription('اسم الإيمبد').setRequired(true).setAutocomplete(true))
+        .addChannelOption(option => option.setName('channel').setDescription('القناة المستهدفة').setRequired(true))
     )
     .addSubcommand(subcommand =>
       subcommand
         .setName('save')
-        .setDescription('Save or overwrite embed into vault')
-        .addStringOption(option => option.setName('name').setDescription('Vault embed name').setRequired(true))
-        .addStringOption(option => option.setName('category').setDescription('Embed category').setRequired(true).addChoices(
+        .setDescription('حفظ أو تحديث إيمبد في الخزنة')
+        .addStringOption(option => option.setName('name').setDescription('اسم الإيمبد').setRequired(true).setAutocomplete(true))
+        .addStringOption(option => option.setName('category').setDescription('الفئة').setRequired(true).addChoices(
           { name: 'Welcome', value: 'Welcome' },
           { name: 'Leave', value: 'Leave' },
           { name: 'Boost', value: 'Boost' },
           { name: 'Manual', value: 'Manual' }
         ))
-        .addStringOption(option => option.setName('title').setDescription('Embed title').setRequired(false))
-        .addStringOption(option => option.setName('description').setDescription('Embed description').setRequired(false))
-        .addStringOption(option => option.setName('image').setDescription('Embed image URL').setRequired(false))
+        .addStringOption(option => option.setName('title').setDescription('العنوان').setRequired(false))
+        .addStringOption(option => option.setName('description').setDescription('الوصف').setRequired(false))
+        .addStringOption(option => option.setName('image').setDescription('رابط الصورة').setRequired(false))
+    )
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName('import')
+        .setDescription('استيراد إيمبد من JSON (Discohook)')
+        .addStringOption(option => option.setName('name').setDescription('اسم الإيمبد').setRequired(true))
+        .addStringOption(option => option.setName('category').setDescription('الفئة').setRequired(true).addChoices(
+          { name: 'Welcome', value: 'Welcome' },
+          { name: 'Leave', value: 'Leave' },
+          { name: 'Boost', value: 'Boost' },
+          { name: 'Manual', value: 'Manual' }
+        ))
+        .addStringOption(option => option.setName('json').setDescription('نص JSON للإيمبد').setRequired(true))
     )
     .addSubcommand(subcommand =>
       subcommand
         .setName('link')
-        .setDescription('Bind a vault embed to an invite code')
-        .addStringOption(option => option.setName('name').setDescription('Vault embed name').setRequired(true))
-        .addStringOption(option => option.setName('invite_code').setDescription('Invite code to link').setRequired(true))
+        .setDescription('ربط إيمبد بكود دعوة')
+        .addStringOption(option => option.setName('name').setDescription('اسم الإيمبد').setRequired(true).setAutocomplete(true))
+        .addStringOption(option => option.setName('invite_code').setDescription('كود الدعوة').setRequired(true))
     )
     .addSubcommand(subcommand =>
       subcommand
         .setName('delete')
-        .setDescription('Delete a vault embed slot')
-        .addStringOption(option => option.setName('name').setDescription('Vault embed name').setRequired(true))
+        .setDescription('احذف إيمبد من الخزنة')
+        .addStringOption(option => option.setName('name').setDescription('اسم الإيمبد').setRequired(true).setAutocomplete(true))
     ),
 
   async execute(interaction) {
@@ -55,30 +71,34 @@ export default {
         return interaction.reply({ content: '❌ EmbedVault module is not loaded.', ephemeral: true });
       }
 
-      if (sub === 'vault') {
+      if (sub === 'manager' || sub === 'vault') {
         const embeds = await client.embedVault.list(guild.id);
         if (!embeds || embeds.length === 0) {
-          return interaction.reply({ content: 'Vault is empty. Add entries with /embed save.', ephemeral: true });
+          return interaction.reply({ content: 'سجل الإيمبد فارغ. استخدم /embed save لإضافة عناصر.', ephemeral: true });
         }
 
         const menu = new StringSelectMenuBuilder()
-          .setCustomId('embedvault_select')
-          .setPlaceholder('Select an embed from the vault')
+          .setCustomId('embedvault_manager_select')
+          .setPlaceholder('اختر إيمبد من الخزنة')
           .setMinValues(1)
           .setMaxValues(1)
           .addOptions(
             embeds.map(item => ({
               label: item.name,
               value: item.name,
-              description: `${item.category} embed`,
+              description: `فئة: ${item.category}`,
             }))
           );
 
-        const row = new ActionRowBuilder().addComponents(menu);
+        const menuRow = new ActionRowBuilder().addComponents(menu);
+        const actionRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('embedvault_create').setLabel('Create New').setStyle(ButtonStyle.Primary),
+          new ButtonBuilder().setCustomId('embedvault_import').setLabel('Import JSON').setStyle(ButtonStyle.Secondary)
+        );
 
         return interaction.reply({
-          content: `Vault has ${embeds.length} entries. Select one to inspect and manage.`,
-          components: [row],
+          content: `لوحة الخزنة الاحترافية (${embeds.length} عناصر). اختر للتعديل/الإرسال/الحذف.`,
+          components: [menuRow, actionRow],
           ephemeral: true,
         });
       }
@@ -115,6 +135,23 @@ export default {
 
         await client.embedVault.upsert(guild.id, name, data, category);
         return interaction.reply({ content: `✅ Saved **${name}** to vault under category **${category}**.`, ephemeral: true });
+      }
+
+      if (sub === 'import') {
+        const name = options.getString('name', true);
+        const category = options.getString('category', true);
+        const rawJson = options.getString('json', true);
+
+        let payload;
+        try {
+          payload = JSON.parse(rawJson);
+          if (!payload || typeof payload !== 'object') throw new Error('Invalid payload');
+        } catch (e) {
+          return interaction.reply({ content: 'JSON غير صالح. يرجى التحقق والمحاولة مرة أخرى.', ephemeral: true });
+        }
+
+        await client.embedVault.upsert(guild.id, name, payload, category);
+        return interaction.reply({ content: `✅ تم استيراد وحفظ **${name}**.`, ephemeral: true });
       }
 
       if (sub === 'link') {

@@ -3,7 +3,21 @@ export default {
   async execute(interaction) {
     try {
       const { client } = interaction;
-      
+
+      if (interaction.isAutocomplete && interaction.isAutocomplete()) {
+        if (interaction.commandName === 'embed' && client.embedVault) {
+          const focused = interaction.options.getFocused(true);
+          if (focused.name === 'name') {
+            const all = await client.embedVault.list(interaction.guildId).catch(() => []);
+            const filtered = all
+              .filter(item => item.name.toLowerCase().includes(String(focused.value).toLowerCase()))
+              .slice(0, 25)
+              .map(item => ({ name: item.name, value: item.name }));
+            return interaction.respond(filtered);
+          }
+        }
+      }
+
       // Handle slash commands
       if (interaction.isChatInputCommand()) {
         const command = client.commands.get(interaction.commandName);
@@ -84,7 +98,7 @@ export default {
       // Route select menu interactions
       if (interaction.isSelectMenu()) {
         try {
-          if (interaction.customId.startsWith('embedvault_select') && client.embedVault && typeof client.embedVault.handleSelectMenu === 'function') {
+          if (interaction.customId.startsWith('embedvault_') && client.embedVault && typeof client.embedVault.handleSelectMenu === 'function') {
             await client.embedVault.handleSelectMenu(interaction);
             return;
           }

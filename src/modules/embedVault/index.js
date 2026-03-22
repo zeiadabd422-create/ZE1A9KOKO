@@ -42,19 +42,18 @@ export default function EmbedVaultModule(client) {
     async handleSelectMenu(interaction) {
       try {
         if (!interaction.isAnySelectMenu()) return;
-        if (!interaction.customId.startsWith('embedvault_select')) return;
+        if (!interaction.customId.startsWith('embedvault_')) return;
 
         const selectedName = interaction.values?.[0];
         if (!selectedName) {
           return interaction.reply({ content: 'No embed selected.', ephemeral: true });
         }
 
-        const embedDoc = await this.getByName(interaction.guildId, row);
+        const embedDoc = await this.getByName(interaction.guildId, selectedName);
         if (!embedDoc) {
-          return interaction.reply({ content: `Embed not found: ${row}`, ephemeral: true });
+          return interaction.reply({ content: `Embed not found: ${selectedName}`, ephemeral: true });
         }
 
-        // buttons for edit/send/delete
         const menuButtons = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId(`embedvault_edit:${embedDoc.name}`)
@@ -145,6 +144,44 @@ export default function EmbedVaultModule(client) {
           await this.delete(interaction.guildId, name);
           return interaction.reply({ content: `Embed **${name}** deleted from vault.`, ephemeral: true });
         }
+
+        if (interaction.customId === 'embedvault_create') {
+          const modal = new ModalBuilder().setCustomId('embedvault_modal_create').setTitle('Create New Embed');
+
+          const nameInput = new TextInputBuilder().setCustomId('name').setLabel('Embed Name').setStyle(TextInputStyle.Short).setRequired(true);
+          const categoryInput = new TextInputBuilder().setCustomId('category').setLabel('Category (Welcome/Leave/Boost/Manual)').setStyle(TextInputStyle.Short).setRequired(true);
+          const titleInput = new TextInputBuilder().setCustomId('title').setLabel('Title').setStyle(TextInputStyle.Short).setRequired(false);
+          const descInput = new TextInputBuilder().setCustomId('description').setLabel('Description').setStyle(TextInputStyle.Paragraph).setRequired(false);
+          const imageInput = new TextInputBuilder().setCustomId('image').setLabel('Image URL').setStyle(TextInputStyle.Short).setRequired(false);
+
+          modal.addComponents(
+            new ActionRowBuilder().addComponents(nameInput),
+            new ActionRowBuilder().addComponents(categoryInput),
+            new ActionRowBuilder().addComponents(titleInput),
+            new ActionRowBuilder().addComponents(descInput),
+            new ActionRowBuilder().addComponents(imageInput)
+          );
+
+          await interaction.showModal(modal);
+          return;
+        }
+
+        if (interaction.customId === 'embedvault_import') {
+          const modal = new ModalBuilder().setCustomId('embedvault_modal_import').setTitle('Import JSON Embed');
+
+          const nameInput = new TextInputBuilder().setCustomId('name').setLabel('Embed Name').setStyle(TextInputStyle.Short).setRequired(true);
+          const categoryInput = new TextInputBuilder().setCustomId('category').setLabel('Category (Welcome/Leave/Boost/Manual)').setStyle(TextInputStyle.Short).setRequired(true);
+          const jsonInput = new TextInputBuilder().setCustomId('json').setLabel('Embed JSON').setStyle(TextInputStyle.Paragraph).setRequired(true);
+
+          modal.addComponents(
+            new ActionRowBuilder().addComponents(nameInput),
+            new ActionRowBuilder().addComponents(categoryInput),
+            new ActionRowBuilder().addComponents(jsonInput)
+          );
+
+          await interaction.showModal(modal);
+          return;
+        }
       } catch (err) {
         console.error('[EmbedVaultModule.handleButtonInteraction]', err);
         if (interaction.isRepliable()) {
@@ -156,6 +193,44 @@ export default function EmbedVaultModule(client) {
     async handleModalSubmit(interaction) {
       try {
         if (!interaction.isModalSubmit()) return;
+
+        if (interaction.customId === 'embedvault_modal_create') {
+          const name = interaction.fields.getTextInputValue('name').trim();
+          const category = interaction.fields.getTextInputValue('category').trim();
+          const title = interaction.fields.getTextInputValue('title').trim();
+          const description = interaction.fields.getTextInputValue('description').trim();
+          const imageUrl = interaction.fields.getTextInputValue('image').trim();
+
+          const data = {
+            ...(title ? { title } : {}),
+            ...(description ? { description } : {}),
+            ...(imageUrl ? { image: { url: imageUrl } } : {}),
+          };
+
+          if (Object.keys(data).length === 0) {
+            return interaction.reply({ content: 'Provide at least one of title/description/image.', ephemeral: true });
+          }
+
+          await this.upsert(interaction.guildId, name, data, category || 'Manual');
+          return interaction.reply({ content: `✅ Embed **${name}** created.`, ephemeral: true });
+        }
+
+        if (interaction.customId === 'embedvault_modal_import') {
+          const name = interaction.fields.getTextInputValue('name').trim();
+          const category = interaction.fields.getTextInputValue('category').trim();
+          const jsonText = interaction.fields.getTextInputValue('json').trim();
+
+          let parsed;
+          try {
+            parsed = JSON.parse(jsonText);
+          } catch (e) {
+            return interaction.reply({ content: 'Invalid JSON format.', ephemeral: true });
+          }
+
+          await this.upsert(interaction.guildId, name, parsed, category || 'Manual');
+          return interaction.reply({ content: `✅ Embed **${name}** imported.`, ephemeral: true });
+        }
+
         if (!interaction.customId.startsWith('embedvault_modal:')) return;
 
         const name = interaction.customId.split(':')[1];
