@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 
 // ─── Colour palette ───────────────────────────────────────────────────────────
 const COLOR = {
@@ -63,11 +63,11 @@ function pageFooter(interaction, page, total) {
 
 // ─── Page builders ────────────────────────────────────────────────────────────
 
-function buildPages(interaction) {
-  // ── Page 1: intro + User + Member ─────────────────────────────────────────
+export function buildPages(interaction) {
+  // ── Page 1: Basic Placeholders (User/Server) ───────────────────────────────
   const p1 = new EmbedBuilder()
-    .setColor(COLOR.user)
-    .setTitle('📖 Embed Vault — Placeholder Reference')
+    .setColor(0x5865F2)
+    .setTitle('📖 Basic Placeholders (User/Server)')
     .setDescription(
       'Placeholders are replaced with **live data** when an embed is sent or previewed.\n' +
       'They work in **every** text field, URL field, author name, footer text, ' +
@@ -76,74 +76,37 @@ function buildPages(interaction) {
     .addFields(
       { name: '👤 User',   value: fmt(PLACEHOLDERS.user),   inline: false },
       { name: '\u200b',    value: '\u200b',                  inline: false },
-      { name: '🎖️ Member', value: fmt(PLACEHOLDERS.member), inline: false }
+      { name: '🏠 Server', value: fmt(PLACEHOLDERS.server), inline: false }
     )
     .setFooter(pageFooter(interaction, 1, 3));
 
-  // ── Page 2: Server + Channel + Special ────────────────────────────────────
+  // ── Page 2: Advanced Data (Join Position, Account Age, Timestamps) ───────
   const p2 = new EmbedBuilder()
-    .setColor(COLOR.server)
-    .setTitle('📖 Placeholder Reference — Server, Channel & Special')
+    .setColor(0x5865F2)
+    .setTitle('📖 Advanced Data (Join Position, Account Age, Timestamps)')
     .addFields(
-      { name: '🏠 Server',   value: fmt(PLACEHOLDERS.server),  inline: false },
-      { name: '\u200b',      value: '\u200b',                   inline: false },
-      { name: '💬 Channel',  value: fmt(PLACEHOLDERS.channel), inline: false },
-      { name: '\u200b',      value: '\u200b',                   inline: false },
-      { name: '✨ Special',  value: fmt(PLACEHOLDERS.special), inline: false }
+      { name: '🎖️ Member', value: fmt(PLACEHOLDERS.member), inline: false },
+      { name: '\u200b',    value: '\u200b',                  inline: false },
+      { name: '⏰ Timestamps', value: fmt([{ ph: '{timestamp}', desc: 'Current time as a **live** Discord relative timestamp  `<t:unix:R>`' }]), inline: false }
     )
     .setFooter(pageFooter(interaction, 2, 3));
 
-  // ── Page 3: Copy-paste examples ───────────────────────────────────────────
+  // ── Page 3: Dynamic Logic (Random Choice {choose}) ───────────────────────
   const p3 = new EmbedBuilder()
-    .setColor(COLOR.example)
-    .setTitle('📖 Placeholder Reference — Examples')
-    .setDescription('Copy-paste ready. Every line below works in any field of the embed editor.\n\u200b')
+    .setColor(0x5865F2)
+    .setTitle('📖 Dynamic Logic (Random Choice {choose})')
+    .setDescription('Copy-paste ready examples with dynamic placeholders.\n\u200b')
     .addFields(
       {
-        name:  '👋 Welcome title',
-        value: '```\nWelcome to {server}, {user.name}!\n```',
+        name:  '🎲 Random Choice',
+        value: fmt([{ ph: '{choose:A|B|C}', desc: 'Randomly picks one option — add as many pipe-separated options as you want' }]),
         inline: false,
       },
       {
-        name:  '📝 Description with random greeting',
+        name:  '📝 Example Description',
         value: '```\n{choose:Hey|Hello|Welcome back}, {user}!\nYou are member #{member_count} and your account is {account_age} days old.\n```',
         inline: false,
-      },
-      {
-        name:  '👤 Author line with live avatar',
-        value: '**Name →** `{user.name}`\n**Icon URL →** `{user.avatar}`',
-        inline: false,
-      },
-      {
-        name:  '🏠 Footer with server icon',
-        value: '**Text →** `{server} • {member_count} members`\n**Icon URL →** `{server.icon}`',
-        inline: false,
-      },
-      {
-        name:  '🖼️ Image showing the user\'s avatar',
-        value: '**Image URL →** `{user.avatar}`',
-        inline: false,
-      },
-      {
-        name:  '⏱️ Live relative timestamp',
-        value: '```\nYou joined {timestamp} — welcome!\n```\n*Renders as a live "X minutes ago" clock in Discord.*',
-        inline: false,
-      },
-      {
-        name:  '🎲 Fully random pick',
-        value: "```\n{choose:You're amazing!|Glad you're here!|The legend arrives.}\n```",
-        inline: false,
-      },
-      {
-        name:  '📋 Field with join date',
-        value: '**Field Name →** `Joined`\n**Field Value →** `{joined_at}  (position #{join_pos})`',
-        inline: false,
-      },
-      {
-        name:  '🌐 Channel mention in description',
-        value: '```\nHead over to {channel.mention} to get started!\n```',
-        inline: false,
-      },
+      }
     )
     .setFooter(pageFooter(interaction, 3, 3));
 
@@ -158,8 +121,18 @@ export default {
     .setDescription('Shows every placeholder supported by Embed Engine V3.'),
 
   async execute(interaction) {
+    const pages = buildPages(interaction);
+    const currentPage = 0;
+    const components = [
+      new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`embed_help_prev_${currentPage}`).setLabel('⬅️ Previous').setStyle(ButtonStyle.Secondary).setDisabled(true),
+        new ButtonBuilder().setCustomId(`embed_help_next_${currentPage}`).setLabel('Next ➡️').setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('embed_help_close').setLabel('❌ Close').setStyle(ButtonStyle.Danger)
+      )
+    ];
     return interaction.reply({
-      embeds: buildPages(interaction),
+      embeds: [pages[currentPage]],
+      components,
       ephemeral: true,
     });
   },

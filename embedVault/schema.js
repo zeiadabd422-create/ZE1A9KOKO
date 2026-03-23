@@ -18,10 +18,10 @@ const EmbedVaultSchema = new mongoose.Schema(
       default: {},
       description: 'Full embed object (title, description, color, image, etc.)',
     },
-    category: {
+    type: {
       type: String,
       required: true,
-      enum: ['Welcome', 'Leave', 'Boost', 'Manual'],
+      enum: ['Welcome', 'Goodbye', 'Partner', 'Manual'],
       default: 'Manual',
     },
     linkedInviteCode: {

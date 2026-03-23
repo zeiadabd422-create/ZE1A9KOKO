@@ -1,3 +1,5 @@
+import { buildPages } from '../commands/utility/embedHelp.js';
+
 export default {
   name: 'interactionCreate',
   async execute(interaction) {
@@ -48,6 +50,29 @@ export default {
           }
           if (interaction.customId.startsWith('embedvault_') && client.embedVault?.handleButtonInteraction) {
             await client.embedVault.handleButtonInteraction(interaction);
+            return;
+          }
+          if (interaction.customId.startsWith('embed_help_')) {
+            const parts = interaction.customId.split('_');
+            const action = parts[2];
+            const currentPage = parseInt(parts[3] || 0);
+            const pages = buildPages(interaction); // Need to import or define
+            // Since it's ephemeral, and to keep simple, just show a message
+            let newPage = currentPage;
+            if (action === 'next') newPage = (currentPage + 1) % pages.length;
+            else if (action === 'prev') newPage = (currentPage - 1 + pages.length) % pages.length;
+            else if (action === 'close') {
+              await interaction.update({ content: 'Help closed.', embeds: [], components: [] });
+              return;
+            }
+            const components = [
+              new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId(`embed_help_prev_${newPage}`).setLabel('⬅️ Previous').setStyle(ButtonStyle.Secondary).setDisabled(newPage === 0),
+                new ButtonBuilder().setCustomId(`embed_help_next_${newPage}`).setLabel('Next ➡️').setStyle(ButtonStyle.Secondary).setDisabled(newPage === pages.length - 1),
+                new ButtonBuilder().setCustomId('embed_help_close').setLabel('❌ Close').setStyle(ButtonStyle.Danger)
+              )
+            ];
+            await interaction.update({ embeds: [pages[newPage]], components });
             return;
           }
           if (client.gateway?.handleInteraction) {

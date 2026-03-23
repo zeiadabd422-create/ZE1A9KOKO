@@ -70,7 +70,7 @@ export default function EmbedVaultModule(client) {
       return EmbedVault.findOne({ guildId, name: name.trim() }).lean();
     },
 
-    async upsert(guildId, name, data, category = 'Manual', metadata = {}) {
+    async upsert(guildId, name, data, type = 'Manual', metadata = {}) {
       // CRITICAL FIX: use $set so Mongoose correctly writes the Mixed/Object `data` field.
       // Without $set, a plain replacement object skips Mongoose's change-detection for
       // Mixed fields, meaning image/thumbnail nested objects are silently not persisted.
@@ -81,7 +81,7 @@ export default function EmbedVaultModule(client) {
             guildId,
             name:             name.trim(),
             data,             // full embed data blob including image/thumbnail
-            category,
+            type,
             // Empty string is a valid intentional clear — use ?? not ||
             authorName:       metadata.authorName       ?? '',
             authorIcon:       metadata.authorIcon       ?? '',
@@ -103,8 +103,8 @@ export default function EmbedVaultModule(client) {
       return EmbedVault.findOne({ guildId, linkedInviteCode: inviteCode.trim() }).lean();
     },
 
-    async getByCategory(guildId, category) {
-      return EmbedVault.findOne({ guildId, category }).sort({ updatedAt: -1 }).lean();
+    async getByType(guildId, type) {
+      return EmbedVault.findOne({ guildId, type }).sort({ updatedAt: -1 }).lean();
     },
 
     async link(guildId, name, inviteCode) {
@@ -144,7 +144,7 @@ export default function EmbedVaultModule(client) {
             embeds.map(item => ({
               label: item.name.length > 25 ? item.name.substring(0, 22) + '…' : item.name,
               value: item.name,
-              description: `Category: ${item.category}`,
+              description: `Type: ${item.type}`,
             }))
           );
 
@@ -481,8 +481,8 @@ export default function EmbedVaultModule(client) {
             ),
             new ActionRowBuilder().addComponents(
               new TextInputBuilder()
-                .setCustomId('category')
-                .setLabel('Category')
+                .setCustomId('type')
+                .setLabel('Type')
                 .setStyle(TextInputStyle.Short)
                 .setRequired(true)
                 .setValue('Manual')
@@ -540,7 +540,7 @@ export default function EmbedVaultModule(client) {
         // ── Import ────────────────────────────────────────────────────────────
         if (customId === 'embedvault_import_modal') {
           const name = interaction.fields.getTextInputValue('name').trim();
-          const category = interaction.fields.getTextInputValue('category').trim();
+          const type = interaction.fields.getTextInputValue('type').trim();
           const jsonText = interaction.fields.getTextInputValue('json').trim();
 
           let parsed;
@@ -559,7 +559,7 @@ export default function EmbedVaultModule(client) {
             });
           }
 
-          await this.upsert(interaction.guildId, name, parsed, category);
+          await this.upsert(interaction.guildId, name, parsed, type);
           return interaction.reply({ content: `✅ Imported **${name}**.`, ephemeral: true });
         }
 
@@ -597,7 +597,7 @@ export default function EmbedVaultModule(client) {
             interaction.guildId,
             finalName,
             updatedData,
-            vaultItem.category,
+            vaultItem.type,
             {
               authorName:       vaultItem.authorName,
               authorIcon:       vaultItem.authorIcon,
@@ -666,7 +666,7 @@ export default function EmbedVaultModule(client) {
             interaction.guildId,
             name,
             vaultItem.data,
-            vaultItem.category,
+            vaultItem.type,
             { authorName, authorIcon, footerText, footerIcon, includeTimestamp: vaultItem.includeTimestamp }
           );
 
@@ -722,7 +722,7 @@ export default function EmbedVaultModule(client) {
             interaction.guildId,
             name,
             updatedData,
-            vaultItem.category,
+            vaultItem.type,
             {
               authorName:       vaultItem.authorName,
               authorIcon:       vaultItem.authorIcon,

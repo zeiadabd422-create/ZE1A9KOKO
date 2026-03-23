@@ -55,7 +55,7 @@ export default function WelcomeModule(client) {
             }
 
             if (!vaultItem) {
-              vaultItem = await clientVault.getByCategory(member.guild.id, 'Welcome');
+              vaultItem = await clientVault.getByType(member.guild.id, 'Welcome');
             }
 
             if (vaultItem && vaultItem.data) {
