@@ -29,6 +29,33 @@ const EmbedVaultSchema = new mongoose.Schema(
       default: '',
       description: 'Optional invite code that triggers this embed when used by a joiner',
     },
+    authorName: {
+      type: String,
+      default: '',
+      trim: true,
+      description: 'Embed author name with placeholder support',
+    },
+    authorIcon: {
+      type: String,
+      default: '',
+      description: 'Embed author icon URL with placeholder support',
+    },
+    footerText: {
+      type: String,
+      default: '',
+      trim: true,
+      description: 'Embed footer text with placeholder support',
+    },
+    footerIcon: {
+      type: String,
+      default: '',
+      description: 'Embed footer icon URL with placeholder support',
+    },
+    includeTimestamp: {
+      type: Boolean,
+      default: false,
+      description: 'Whether to include a timestamp in the embed',
+    },
   },
   { timestamps: true }
 );

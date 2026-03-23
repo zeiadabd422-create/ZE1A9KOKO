@@ -90,12 +90,16 @@ export function render(data = {}, placeholders = {}) {
     out.timestamp = data.timestamp === true ? new Date().toISOString() : data.timestamp;
   }
 
-  // Author
-  if (data.author && data.author.name) {
+  // Author - supports both old format (author.name) and new flat fields (authorName)
+  const authorName = data.author?.name || data.authorName;
+  const authorIcon = data.author?.iconURL || data.authorIcon;
+  const authorUrl = data.author?.url;
+  
+  if (authorName) {
     out.author = {
-      name: resolvePlaceholders(data.author.name, placeholders),
-      iconURL: data.author.iconURL ? resolvePlaceholders(data.author.iconURL, placeholders) : undefined,
-      url: data.author.url,
+      name: resolvePlaceholders(authorName, placeholders),
+      iconURL: authorIcon ? resolvePlaceholders(authorIcon, placeholders) : undefined,
+      url: authorUrl,
     };
   }
 
@@ -111,11 +115,14 @@ export function render(data = {}, placeholders = {}) {
     out.image = { url: resolvePlaceholders(imgUrl, placeholders) };
   }
 
-  // Footer
-  if (data.footer && data.footer.text) {
+  // Footer - supports both old format (footer.text) and new flat fields (footerText)
+  const footerText = data.footer?.text || data.footerText;
+  const footerIcon = data.footer?.iconURL || data.footerIcon;
+  
+  if (footerText) {
     out.footer = {
-      text: resolvePlaceholders(data.footer.text, placeholders),
-      iconURL: data.footer.iconURL ? resolvePlaceholders(data.footer.iconURL, placeholders) : undefined,
+      text: resolvePlaceholders(footerText, placeholders),
+      iconURL: footerIcon ? resolvePlaceholders(footerIcon, placeholders) : undefined,
     };
   }
 
@@ -165,11 +172,15 @@ export function validateEmbed(data = {}) {
     });
   }
 
-  if (data.author?.name && data.author.name.length > 256) {
+  // Author validation (both old and new format)
+  const authorName = data.author?.name || data.authorName;
+  if (authorName && authorName.length > 256) {
     errors.push('Author name must be 256 characters or less');
   }
 
-  if (data.footer?.text && data.footer.text.length > 2048) {
+  // Footer validation (both old and new format)
+  const footerText = data.footer?.text || data.footerText;
+  if (footerText && footerText.length > 2048) {
     errors.push('Footer text must be 2048 characters or less');
   }
 
