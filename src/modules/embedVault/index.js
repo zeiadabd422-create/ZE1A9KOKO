@@ -71,19 +71,24 @@ export default function EmbedVaultModule(client) {
     },
 
     async upsert(guildId, name, data, category = 'Manual', metadata = {}) {
+      // CRITICAL FIX: use $set so Mongoose correctly writes the Mixed/Object `data` field.
+      // Without $set, a plain replacement object skips Mongoose's change-detection for
+      // Mixed fields, meaning image/thumbnail nested objects are silently not persisted.
       return EmbedVault.findOneAndUpdate(
         { guildId, name: name.trim() },
         {
-          guildId,
-          name: name.trim(),
-          data,
-          category,
-          // Always write flat metadata – empty string is a valid intentional clear
-          authorName: metadata.authorName ?? '',
-          authorIcon: metadata.authorIcon ?? '',
-          footerText: metadata.footerText ?? '',
-          footerIcon: metadata.footerIcon ?? '',
-          includeTimestamp: metadata.includeTimestamp ?? false,
+          $set: {
+            guildId,
+            name:             name.trim(),
+            data,             // full embed data blob including image/thumbnail
+            category,
+            // Empty string is a valid intentional clear — use ?? not ||
+            authorName:       metadata.authorName       ?? '',
+            authorIcon:       metadata.authorIcon       ?? '',
+            footerText:       metadata.footerText       ?? '',
+            footerIcon:       metadata.footerIcon       ?? '',
+            includeTimestamp: metadata.includeTimestamp ?? false,
+          },
         },
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
@@ -570,8 +575,8 @@ export default function EmbedVaultModule(client) {
           const description  = interaction.fields.getTextInputValue('description');
           const color        = interaction.fields.getTextInputValue('color').trim();
 
-          // Build updated data: only delete key if field was left completely empty
-          const updatedData = { ...vaultItem.data };
+          // Deep-copy: preserves nested objects (image, thumbnail, fields) correctly
+          const updatedData = JSON.parse(JSON.stringify(vaultItem.data ?? {}));
           if (title)       updatedData.title       = title;
           else             delete updatedData.title;
           if (description) updatedData.description = description;
@@ -693,9 +698,12 @@ export default function EmbedVaultModule(client) {
           const tsStr        = interaction.fields.getTextInputValue('include_timestamp').trim().toLowerCase();
           const timestamp    = tsStr === 'true' || tsStr === '1';
 
-          const updatedData = { ...vaultItem.data };
+          // Deep-copy so nested objects (image, thumbnail, fields) are fresh instances.
+          // This prevents Mongoose Mixed-field change-detection from silently dropping
+          // nested object writes when the doc comes back from a .lean() query.
+          const updatedData = JSON.parse(JSON.stringify(vaultItem.data ?? {}));
 
-          // FIX – support placeholder URLs (e.g. {user.avatar}); also allow clearing
+          // Explicitly assign image/thumbnail so they land in data.image.url / data.thumbnail.url
           if (imageUrl)     updatedData.image     = { url: imageUrl };
           else              delete updatedData.image;
 
