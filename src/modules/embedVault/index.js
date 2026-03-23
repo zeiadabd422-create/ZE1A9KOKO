@@ -222,6 +222,16 @@ export default function EmbedVaultModule(client) {
 
         if (isEdit) {
           const previewEmbed = createPreview(buildFullData(embedDoc), { member: interaction.member });
+          
+          // Check if interaction was deferred - if so, use editReply instead of reply
+          if (interaction.deferred) {
+            return await interaction.editReply({
+              content,
+              embeds: [previewEmbed],
+              components,
+            });
+          }
+          
           return interaction.reply({
             content,
             embeds: [previewEmbed],
@@ -230,6 +240,10 @@ export default function EmbedVaultModule(client) {
           });
         }
 
+        if (interaction.deferred) {
+          return await interaction.editReply({ content, components });
+        }
+        
         return interaction.reply({ content, components, ephemeral: true });
       } catch (err) {
         console.error('[EmbedVaultModule.openModularEditor]', err);
@@ -252,7 +266,7 @@ export default function EmbedVaultModule(client) {
             .setLabel('اسم الإمبد')
             .setStyle(TextInputStyle.Short)
             .setRequired(true)
-            .setPlaceholder('مثل: بطاقة الترحيب')
+            .setPlaceholder('أعطِ إمبدك اسماً يليق بعظمة إمبراطوريتك....')
             .setValue(isEdit ? embedDoc.name : '')
         ),
         new ActionRowBuilder().addComponents(
@@ -261,6 +275,7 @@ export default function EmbedVaultModule(client) {
             .setLabel('النوع (Welcome/Goodbye/Partner/Manual)')
             .setStyle(TextInputStyle.Short)
             .setRequired(true)
+            .setPlaceholder('حدد غرض الإمبد: ترحيب أم وداع أم شراكة....')
             .setValue(isEdit ? embedDoc.type : 'Manual')
         ),
         new ActionRowBuilder().addComponents(
@@ -269,7 +284,7 @@ export default function EmbedVaultModule(client) {
             .setLabel('العنوان')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('يدعم الدوال: `{user.name}`, `{server}`, `{choose:A|B}`…')
+            .setPlaceholder('مثال: مرحباً {user.name} في {server}! اكتب عنواناً مهيباً....')
             .setValue(embedDoc?.data?.title ?? '')
         ),
         new ActionRowBuilder().addComponents(
@@ -278,16 +293,17 @@ export default function EmbedVaultModule(client) {
             .setLabel('الوصف')
             .setStyle(TextInputStyle.Paragraph)
             .setRequired(false)
-            .setPlaceholder('النص الرئيسي. الدوال: `{user.name}`, `{member_count}`, …')
+            .setPlaceholder('اكتب هنا الترحيب الذي يليق بأعضاء إمبراطوريتك. دع روحك تتحدث....')
             .setValue(embedDoc?.data?.description ?? '')
         ),
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('color')
-            .setLabel('اللون (hex، مثل #FF5733)')
+            .setLabel('اللون (hex، مثل #DAA520 للذهب)')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setValue(embedDoc?.data?.color ?? '#2f3136')
+            .setPlaceholder('#DAA520 (ذهبي رفيع) أو #9ACD32 (أخضر فستق)')
+            .setValue(embedDoc?.data?.color ?? '#DAA520')
         )
       );
 
@@ -754,16 +770,16 @@ export default function EmbedVaultModule(client) {
             .setLabel('اسم المؤلف')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('`{user.name}` أو نص مخصص')
+            .setPlaceholder('من يتحدث؟ `{user.name}` أم صرخة البجعة الحكيمة؟')
             .setValue(embedDoc?.authorName ?? '')
         ),
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('author_icon')
-            .setLabel('رابط أيقونة المؤلف (يدعم `{user.avatar}`)')
+            .setLabel('أيقونة المؤلف')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('`{user.avatar}` أو https://…')
+            .setPlaceholder('`{user.avatar}` لصورة المستخدم أو رابط صورة....') 
             .setValue(embedDoc?.authorIcon ?? '')
         ),
         new ActionRowBuilder().addComponents(
@@ -772,16 +788,16 @@ export default function EmbedVaultModule(client) {
             .setLabel('نص التذييل')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('`{server}` • `{member_count}` أعضاء')
+            .setPlaceholder('كلمة تودع القارئ: `{server}` • `{member_count}` أعضاء يتوقعونك....') 
             .setValue(embedDoc?.footerText ?? '')
         ),
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('footer_icon')
-            .setLabel('رابط أيقونة التذييل (يدعم `{server.icon}`)')
+            .setLabel('أيقونة التذييل')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('https://…')
+            .setPlaceholder('شعار الإمبراطورية: `{server.icon}` أو رابط فريد....)
             .setValue(embedDoc?.footerIcon ?? '')
         )
       );
@@ -799,28 +815,28 @@ export default function EmbedVaultModule(client) {
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('image_url')
-            .setLabel('رابط الصورة (يدعم الدوال المشروطة)')
+            .setLabel('رابط الصورة الرئيسية')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('https://… أو `{user.avatar}`')
+            .setPlaceholder('اختر صورة ترمز لقوة إمبراطوريتك: `{user.avatar}` أم صورة فريدة؟')
             .setValue(embedDoc?.data?.image?.url ?? '')
         ),
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('thumbnail_url')
-            .setLabel('رابط الصورة المصغّرة (يدعم الدوال المشروطة)')
+            .setLabel('رابط الصورة المصغّرة')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('https://… أو `{user.avatar}`')
+            .setPlaceholder('صورة جانبية صغيرة: `{user.avatar}` أم شعار جانبي؟')
             .setValue(embedDoc?.data?.thumbnail?.url ?? '')
         ),
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('include_timestamp')
-            .setLabel('هل تريد تضمين الطابع الزمني؟ (true / false)')
+            .setLabel('هل تريد ختماً زمنياً؟ (true / false)')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('true أو false')
+            .setPlaceholder('true لإظهار الوقت، false للخفاء')
             .setValue(embedDoc?.includeTimestamp ? 'true' : 'false')
         )
       );
@@ -837,10 +853,10 @@ export default function EmbedVaultModule(client) {
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('channel_id')
-            .setLabel('معرّف القناة')
+            .setLabel('معرّف القناة أو رابطها')
             .setStyle(TextInputStyle.Short)
             .setRequired(true)
-            .setPlaceholder('أدخل معرّف القناة أو رابطها')
+            .setPlaceholder('أين تريد أن يُسمع صوت إمبراطوريتك؟ ضع معرّف القناة هنا....')
         )
       );
 
@@ -856,10 +872,10 @@ export default function EmbedVaultModule(client) {
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('json_data')
-            .setLabel('بيانات JSON')
+            .setLabel('بيانات JSON المُصدّرة')
             .setStyle(TextInputStyle.Paragraph)
             .setRequired(true)
-            .setPlaceholder('الصق بيانات JSON المُصدّرة للإمبد هنا')
+            .setPlaceholder('الصق البيانات المُصدّرة لإمبد آخر هنا. دع الإمبراطورية تتوسع بالاستيراد....')
         )
       );
 
