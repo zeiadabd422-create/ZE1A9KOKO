@@ -120,79 +120,8 @@ export default function EmbedVaultModule(client) {
     },
 
     async openManager(interaction, page = 0) {
-      try {
-        const embeds = await this.list(interaction.guildId);
-
-        if (!embeds || embeds.length === 0) {
-          return interaction.reply({
-            content: '📦 خزنة الإمبد فارغة. أنشئ إمبدك الأول!',
-            components: [
-              new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                  .setCustomId('embedvault_create')
-                  .setLabel('➕ إنشاء أول إمبد')
-                  .setStyle(ButtonStyle.Primary)
-              ),
-            ],
-            ephemeral: true,
-          });
-        }
-
-        // Premium Button Grid System
-        const buttonsPerPage = 6;
-        const totalPages = Math.ceil(embeds.length / buttonsPerPage);
-        const startIdx = page * buttonsPerPage;
-        const pageEmbeds = embeds.slice(startIdx, startIdx + buttonsPerPage);
-
-        // Create button grid (3 columns x 2 rows max)
-        const rows = [];
-        for (let i = 0; i < pageEmbeds.length; i += 3) {
-          const rowButtons = pageEmbeds.slice(i, i + 3).map(embed => {
-            const label = embed.name.length > 15 ? embed.name.substring(0, 12) + '…' : embed.name;
-            const icon = embed.linkedInviteCode ? '🔗' : '📦';
-            return new ButtonBuilder()
-              .setCustomId(`embedvault_select:${embed.name}`)
-              .setLabel(`${icon} ${label}`)
-              .setStyle(ButtonStyle.Secondary);
-          });
-          rows.push(new ActionRowBuilder().addComponents(rowButtons));
-        }
-
-        // Add pagination and action buttons with Arabic labels
-        const paginationRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`embedvault_manager_prev:${page}`)
-            .setLabel('⬅️ السابق')
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(page === 0),
-          new ButtonBuilder()
-            .setCustomId('embedvault_create')
-            .setLabel('➕ جديد')
-            .setStyle(ButtonStyle.Success),
-          new ButtonBuilder()
-            .setCustomId('embedvault_import')
-            .setLabel('📥 استيراد')
-            .setStyle(ButtonStyle.Secondary),
-          new ButtonBuilder()
-            .setCustomId(`embedvault_manager_next:${page}`)
-            .setLabel('التالي ➡️')
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(page >= totalPages - 1)
-        );
-
-        rows.push(paginationRow);
-
-        return interaction.reply({
-          content: `## 📦 مدير الإمبد\n✨ **${embeds.length}** إمبد(s) في الخزنة\n\n**الصفحة ${page + 1}/${totalPages}** — انقر على إمبد للإدارة.`,
-          components: rows,
-          ephemeral: true,
-        });
-      } catch (err) {
-        console.error('[EmbedVaultModule.openManager]', err);
-        if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-          await interaction.reply({ content: '❌ فشل فتح مدير الإمبد.', ephemeral: true });
-        }
-      }
+      // Deploy Select Menu version from manager.js
+      return manager.displayManager.call({ embedVaultModule: this }, interaction, page);
     },
 
     async openModularEditor(interaction, embedDoc = null) {
@@ -259,7 +188,7 @@ export default function EmbedVaultModule(client) {
       const truncatedName = embedDoc?.name ? embedDoc.name.slice(0, 20) : '';
       const modalTitle = isEdit 
         ? `تعديل: ${truncatedName}` 
-        : 'إنشاء – معلومات أساسية';
+        : 'إنشاء الإمبد – معلومات';
       
       const modal = new ModalBuilder()
         .setCustomId(isEdit ? `embedvault_basicinfo_submit:${embedDoc.name}` : 'embedvault_basicinfo_submit_create')
@@ -503,8 +432,10 @@ export default function EmbedVaultModule(client) {
 
           const newName = interaction.fields.getTextInputValue('embed_name').trim();
           const newType = interaction.fields.getTextInputValue('embed_type').trim();
-          const title = interaction.fields.getTextInputValue('title') || undefined;
-          const description = interaction.fields.getTextInputValue('description') || undefined;
+          const titleInput = interaction.fields.getTextInputValue('title').trim();
+          const title = titleInput ? titleInput : undefined;
+          const descriptionInput = interaction.fields.getTextInputValue('description').trim();
+          const description = descriptionInput ? descriptionInput : undefined;
           const color = interaction.fields.getTextInputValue('color').trim() || undefined;
 
           const validTypes = ['Welcome', 'Goodbye', 'Partner', 'Manual'];
@@ -628,8 +559,10 @@ export default function EmbedVaultModule(client) {
           const vaultItem = await this.getByName(interaction.guildId, embedName);
           if (!vaultItem) return interaction.editReply({ content: '❌ لم يتم العثور على الإمبد.' });
 
-          const imageUrl = interaction.fields.getTextInputValue('image_url') || undefined;
-          const thumbnailUrl = interaction.fields.getTextInputValue('thumbnail_url') || undefined;
+          const imageUrlInput = interaction.fields.getTextInputValue('image_url').trim();
+          const imageUrl = imageUrlInput ? imageUrlInput : undefined;
+          const thumbnailUrlInput = interaction.fields.getTextInputValue('thumbnail_url').trim();
+          const thumbnailUrl = thumbnailUrlInput ? thumbnailUrlInput : undefined;
           const includeTimestampStr = interaction.fields.getTextInputValue('include_timestamp') || 'false';
           const includeTimestamp = includeTimestampStr.toLowerCase() === 'true';
 
@@ -786,7 +719,7 @@ export default function EmbedVaultModule(client) {
       const truncatedName = embedDoc?.name ? embedDoc.name.slice(0, 15) : '';
       const modalTitle = isEdit 
         ? `تعديل: ${truncatedName}` 
-        : 'إنشاء – المؤلف/التذييل';
+        : 'إنشاء – مؤلف/تذييل';
       
       const modal = new ModalBuilder()
         .setCustomId(isEdit ? `embedvault_authorfooter_submit:${embedDoc.name}` : 'embedvault_authorfooter_submit_create')
@@ -799,7 +732,7 @@ export default function EmbedVaultModule(client) {
             .setLabel('اسم المؤلف')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('من يتحدث؟ `{user.name}` أم صرخة البجعة الحكيمة؟')
+            .setPlaceholder("من يتحدث؟ `{user.name}` أو أيقونة")
             .setValue(embedDoc?.authorName ?? '')
         ),
         new ActionRowBuilder().addComponents(
@@ -808,7 +741,7 @@ export default function EmbedVaultModule(client) {
             .setLabel('أيقونة المؤلف')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('`{user.avatar}` لصورة المستخدم أو رابط صورة....') 
+            .setPlaceholder("`{user.avatar}` أو رابط صورة")
             .setValue(embedDoc?.authorIcon ?? '')
         ),
         new ActionRowBuilder().addComponents(
@@ -817,7 +750,7 @@ export default function EmbedVaultModule(client) {
             .setLabel('نص التذييل')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('كلمة تودع القارئ: `{server}` • `{member_count}` أعضاء يتوقعونك....') 
+            .setPlaceholder("كلمة التودع: `{server}` • `{member_count}`")
             .setValue(embedDoc?.footerText ?? '')
         ),
         new ActionRowBuilder().addComponents(
@@ -826,7 +759,7 @@ export default function EmbedVaultModule(client) {
             .setLabel('أيقونة التذييل')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('شعار الإمبراطورية: `{server.icon}` أو رابط فريد....)
+            .setPlaceholder("`{server.icon}` أو رابط فريد")
             .setValue(embedDoc?.footerIcon ?? '')
         )
       );
@@ -840,7 +773,7 @@ export default function EmbedVaultModule(client) {
       const truncatedName = embedDoc?.name ? embedDoc.name.slice(0, 20) : '';
       const modalTitle = isEdit 
         ? `تعديل: ${truncatedName}` 
-        : 'إنشاء – الصور';
+        : 'إنشاء – صور الإمبد';
       
       const modal = new ModalBuilder()
         .setCustomId(isEdit ? `embedvault_images_submit:${embedDoc.name}` : 'embedvault_images_submit_create')
@@ -853,7 +786,7 @@ export default function EmbedVaultModule(client) {
             .setLabel('رابط الصورة الرئيسية')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('اختر صورة ترمز لقوة إمبراطوريتك: `{user.avatar}` أم صورة فريدة؟')
+            .setPlaceholder("`{user.avatar}` أو رابط صورة فريد")
             .setValue(embedDoc?.data?.image?.url ?? '')
         ),
         new ActionRowBuilder().addComponents(
@@ -862,7 +795,7 @@ export default function EmbedVaultModule(client) {
             .setLabel('رابط الصورة المصغّرة')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('صورة جانبية صغيرة: `{user.avatar}` أم شعار جانبي؟')
+            .setPlaceholder("`{user.avatar}` أو شعار جانبي")
             .setValue(embedDoc?.data?.thumbnail?.url ?? '')
         ),
         new ActionRowBuilder().addComponents(
@@ -881,7 +814,7 @@ export default function EmbedVaultModule(client) {
 
     async openSendModal(interaction, embedDoc) {
       // Fix #1: Keep modal title under 45 characters
-      const truncatedName = embedDoc.name.slice(0, 20);
+      const truncatedName = embedDoc.name.slice(0, 15);
       const modal = new ModalBuilder()
         .setCustomId(`embedvault_send_submit:${embedDoc.name}`)
         .setTitle(`إرسال: ${truncatedName}`);
