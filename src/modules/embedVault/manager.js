@@ -137,6 +137,91 @@ export default function EmbedManagerModule() {
     },
 
     /**
+     * Update embed manager by editing the existing reply (safe for pagination)
+     */
+    async updateManager(interaction, page = 0) {
+      try {
+        if (!this.embedVaultModule) {
+          return await interaction.editReply({ content: '❌ Embed vault not initialized.', components: [] });
+        }
+
+        const embeds = await this.embedVaultModule.list(interaction.guildId);
+
+        if (!embeds || embeds.length === 0) {
+          return await interaction.editReply({
+            content: '📦 **Embed Vault Empty**\nCreate your first embed to get started!',
+            components: [
+              new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                  .setCustomId('embedvault_create')
+                  .setLabel('➕ إنشاء أول إمبد')
+                  .setStyle(ButtonStyle.Primary)
+              ),
+            ],
+          });
+        }
+
+        // Pagination settings
+        const buttonsPerPage = 6;
+        const totalPages = Math.ceil(embeds.length / buttonsPerPage);
+        const startIdx = page * buttonsPerPage;
+        const pageEmbeds = embeds.slice(startIdx, startIdx + buttonsPerPage);
+
+        // Build button grid (3 columns, 2 rows max)
+        const rows = [];
+        for (let i = 0; i < pageEmbeds.length; i += 3) {
+          const rowButtons = pageEmbeds.slice(i, i + 3).map(embed => {
+            const label = embed.name.length > 15 ? embed.name.substring(0, 12) + '…' : embed.name;
+            const icon = embed.linkedInviteCode ? '🔗' : '📦';
+            return new ButtonBuilder()
+              .setCustomId(`embedvault_select:${embed.name}`)
+              .setLabel(`${icon} ${label}`)
+              .setStyle(ButtonStyle.Secondary);
+          });
+          rows.push(new ActionRowBuilder().addComponents(rowButtons));
+        }
+
+        // Premium header embed
+        const headerEmbed = new EmbedBuilder()
+          .setColor(0x5865F2)
+          .setTitle('📦 مدير الإيمبد – واجهة البريميوم')
+          .setDescription(`**${embeds.length}** إيمبد(s) في الخزنة\n**الصفحة ${page + 1}/${totalPages}** — اختر إيمبد للإدارة`)
+          .setFooter({ text: '✨ انقر على إيمبد للتعديل • استخدم الترقيم للتصفح' });
+
+        // Pagination + action buttons
+        const paginationRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId(`embedvault_manager_prev:${page}`)
+            .setLabel('⬅️ السابق')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(page === 0),
+          new ButtonBuilder()
+            .setCustomId('embedvault_create')
+            .setLabel('➕ جديد')
+            .setStyle(ButtonStyle.Success),
+          new ButtonBuilder()
+            .setCustomId('embedvault_import')
+            .setLabel('📥 استيراد')
+            .setStyle(ButtonStyle.Secondary),
+          new ButtonBuilder()
+            .setCustomId(`embedvault_manager_next:${page}`)
+            .setLabel('التالي ➡️')
+            .setStyle(ButtonStyle.Secondary)
+            .setDisabled(page >= totalPages - 1)
+        );
+
+        rows.push(paginationRow);
+
+        return await interaction.editReply({
+          embeds: [headerEmbed],
+          components: rows,
+        });
+      } catch (err) {
+        console.error('[EmbedManager.updateManager] Error:', err);
+      }
+    },
+
+    /**
      * Handle pagination requests
      */
     async handlePagination(interaction, direction, currentPage) {
@@ -156,14 +241,14 @@ export default function EmbedManagerModule() {
           newPage = Math.max(currentPage - 1, 0);
         }
 
-        // Reply with the new page
+        // Defer update, then use updateManager to edit reply safely
         await interaction.deferUpdate();
-        await this.displayManager(interaction, newPage);
+        await this.updateManager(interaction, newPage);
       } catch (err) {
         console.error('[EmbedManager.handlePagination] Error:', err);
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
           await interaction.reply({
-            content: '❌ Pagination error.',
+            content: '❌ خطأ في الترقيم.',
             ephemeral: true,
           });
         }

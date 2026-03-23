@@ -28,27 +28,27 @@ function buildEditorRow(embedName) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`embedvault_basicinfo:${embedName}`)
-      .setLabel('✏️ Basic Info')
+      .setLabel('✏️ معلومات أساسية')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`embedvault_authorfooter:${embedName}`)
-      .setLabel('👤 Author/Footer')
+      .setLabel('👤 المؤلف/التذييل')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`embedvault_images:${embedName}`)
-      .setLabel('🖼️ Images')
+      .setLabel('🖼️ الصور')
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId(`embedvault_preview_modal:${embedName}`)
-      .setLabel('👁️ Preview')
+      .setLabel('👁️ معاينة')
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`embedvault_send:${embedName}`)
-      .setLabel('📤 Send')
+      .setLabel('📤 إرسال')
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId(`embedvault_delete:${embedName}`)
-      .setLabel('🗑️ Delete')
+      .setLabel('🗑️ حذف')
       .setStyle(ButtonStyle.Danger),
   );
 }
@@ -125,12 +125,12 @@ export default function EmbedVaultModule(client) {
 
         if (!embeds || embeds.length === 0) {
           return interaction.reply({
-            content: '📦 Embed vault is empty. Create your first embed!',
+            content: '📦 خزنة الإمبد فارغة. أنشئ إمبدك الأول!',
             components: [
               new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                   .setCustomId('embedvault_create')
-                  .setLabel('➕ Create First Embed')
+                  .setLabel('➕ إنشاء أول إمبد')
                   .setStyle(ButtonStyle.Primary)
               ),
             ],
@@ -158,24 +158,24 @@ export default function EmbedVaultModule(client) {
           rows.push(new ActionRowBuilder().addComponents(rowButtons));
         }
 
-        // Add pagination and action buttons
+        // Add pagination and action buttons with Arabic labels
         const paginationRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId(`embedvault_manager_prev:${page}`)
-            .setLabel('⬅️')
+            .setLabel('⬅️ السابق')
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(page === 0),
           new ButtonBuilder()
             .setCustomId('embedvault_create')
-            .setLabel('➕ New')
+            .setLabel('➕ جديد')
             .setStyle(ButtonStyle.Success),
           new ButtonBuilder()
             .setCustomId('embedvault_import')
-            .setLabel('📥 Import')
+            .setLabel('📥 استيراد')
             .setStyle(ButtonStyle.Secondary),
           new ButtonBuilder()
             .setCustomId(`embedvault_manager_next:${page}`)
-            .setLabel('➡️')
+            .setLabel('التالي ➡️')
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(page >= totalPages - 1)
         );
@@ -183,14 +183,14 @@ export default function EmbedVaultModule(client) {
         rows.push(paginationRow);
 
         return interaction.reply({
-          content: `## 📦 Embed Manager\n✨ ${embeds.length} embed(s) in vault\n\n**Page ${page + 1}/${totalPages}** — Click an embed to manage it.`,
+          content: `## 📦 مدير الإمبد\n✨ **${embeds.length}** إمبد(s) في الخزنة\n\n**الصفحة ${page + 1}/${totalPages}** — انقر على إمبد للإدارة.`,
           components: rows,
           ephemeral: true,
         });
       } catch (err) {
         console.error('[EmbedVaultModule.openManager]', err);
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-          await interaction.reply({ content: '❌ Failed to open embed manager.', ephemeral: true });
+          await interaction.reply({ content: '❌ فشل فتح مدير الإمبد.', ephemeral: true });
         }
       }
     },
@@ -200,22 +200,22 @@ export default function EmbedVaultModule(client) {
         const isEdit = !!embedDoc;
 
         const content = isEdit
-          ? `## ✏️ Editing: **${embedDoc.name}**\nClick a section to edit it. Changes are saved immediately.`
-          : '## ➕ Create New Embed\nFill in each section. Start with **Basic Info**.';
+          ? `## ✏️ جاري التعديل: **${embedDoc.name}**\nانقر على قسم لتعديله. سيتم حفظ التغييرات فوراً.`
+          : '## ➕ إنشاء إمبد جديد\nملء كل قسم. ابدأ بـ **المعلومات الأساسية**.';
 
         const components = isEdit ? [buildEditorRow(embedDoc.name)] : [
           new ActionRowBuilder().addComponents(
             new ButtonBuilder()
               .setCustomId('embedvault_basicinfo_create')
-              .setLabel('✏️ Basic Info')
+              .setLabel('✏️ معلومات أساسية')
               .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
               .setCustomId('embedvault_authorfooter_create')
-              .setLabel('👤 Author/Footer')
+              .setLabel('👤 المؤلف/التذييل')
               .setStyle(ButtonStyle.Primary),
             new ButtonBuilder()
               .setCustomId('embedvault_images_create')
-              .setLabel('🖼️ Images')
+              .setLabel('🖼️ الصور')
               .setStyle(ButtonStyle.Primary),
           ),
         ];
@@ -234,7 +234,7 @@ export default function EmbedVaultModule(client) {
       } catch (err) {
         console.error('[EmbedVaultModule.openModularEditor]', err);
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-          await interaction.reply({ content: '❌ Failed to open modular editor.', ephemeral: true });
+          await interaction.reply({ content: '❌ فشل فتح محرر الإمبد المرئي.', ephemeral: true });
         }
       }
     },
@@ -243,22 +243,22 @@ export default function EmbedVaultModule(client) {
       const isEdit = !!embedDoc;
       const modal = new ModalBuilder()
         .setCustomId(isEdit ? `embedvault_basicinfo_submit:${embedDoc.name}` : 'embedvault_basicinfo_submit_create')
-        .setTitle(isEdit ? `Edit Basic Info – ${embedDoc.name}` : 'Create – Basic Info');
+        .setTitle(isEdit ? `تعديل المعلومات الأساسية – ${embedDoc.name}` : 'إنشاء – المعلومات الأساسية');
 
       modal.addComponents(
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('embed_name')
-            .setLabel('Embed Name')
+            .setLabel('اسم الإمبد')
             .setStyle(TextInputStyle.Short)
             .setRequired(true)
-            .setPlaceholder('e.g., Welcome Card')
+            .setPlaceholder('مثل: بطاقة الترحيب')
             .setValue(isEdit ? embedDoc.name : '')
         ),
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('embed_type')
-            .setLabel('Type (Welcome/Goodbye/Partner/Manual)')
+            .setLabel('النوع (Welcome/Goodbye/Partner/Manual)')
             .setStyle(TextInputStyle.Short)
             .setRequired(true)
             .setValue(isEdit ? embedDoc.type : 'Manual')
@@ -266,25 +266,25 @@ export default function EmbedVaultModule(client) {
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('title')
-            .setLabel('Title')
+            .setLabel('العنوان')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('Supports `{user.name}`, `{server}`, `{choose:A|B}`…')
+            .setPlaceholder('يدعم الدوال: `{user.name}`, `{server}`, `{choose:A|B}`…')
             .setValue(embedDoc?.data?.title ?? '')
         ),
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('description')
-            .setLabel('Description')
+            .setLabel('الوصف')
             .setStyle(TextInputStyle.Paragraph)
             .setRequired(false)
-            .setPlaceholder('Main text. Placeholders: `{user.name}`, `{member_count}`, …')
+            .setPlaceholder('النص الرئيسي. الدوال: `{user.name}`, `{member_count}`, …')
             .setValue(embedDoc?.data?.description ?? '')
         ),
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('color')
-            .setLabel('Color (hex, e.g. #FF5733)')
+            .setLabel('اللون (hex، مثل #FF5733)')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
             .setValue(embedDoc?.data?.color ?? '#2f3136')
@@ -323,17 +323,19 @@ export default function EmbedVaultModule(client) {
         if (!interaction.isButton()) return;
         const { customId } = interaction;
 
-        // Manager Pagination
+        // Manager Pagination - use manager.updateManager after deferUpdate
         if (customId.startsWith('embedvault_manager_prev:')) {
           await interaction.deferUpdate();
           const page = Math.max(0, parseInt(customId.split(':')[1]) - 1);
-          return this.displayManager(interaction, page);
+          manager.embedVaultModule = this;
+          return manager.updateManager(interaction, page);
         }
 
         if (customId.startsWith('embedvault_manager_next:')) {
           await interaction.deferUpdate();
           const page = parseInt(customId.split(':')[1]) + 1;
-          return this.displayManager(interaction, page);
+          manager.embedVaultModule = this;
+          return manager.updateManager(interaction, page);
         }
 
         // Embed Selection (New Premium Button System)
@@ -385,6 +387,19 @@ export default function EmbedVaultModule(client) {
           return this.openLivePreviewModal(interaction, embedDoc);
         }
 
+        // Send Embed to Channel
+        if (customId.startsWith('embedvault_send:')) {
+          const name = customId.split(':')[1];
+          const embedDoc = await this.getByName(interaction.guildId, name);
+          if (!embedDoc) return interaction.reply({ content: '❌ Embed not found.', ephemeral: true });
+          return this.openSendModal(interaction, embedDoc);
+        }
+
+        // Import Embed from JSON
+        if (customId === 'embedvault_import') {
+          return this.openImportModal(interaction);
+        }
+
         // Create
         if (customId === 'embedvault_create') {
           return this.openModularEditor(interaction);
@@ -412,19 +427,20 @@ export default function EmbedVaultModule(client) {
 
         // ── Basic Info (create) ───────────────────────────────────────────────
         if (customId === 'embedvault_basicinfo_submit_create') {
+          await interaction.deferReply({ ephemeral: true });
+          
           const name = interaction.fields.getTextInputValue('embed_name').trim();
           const type = interaction.fields.getTextInputValue('embed_type').trim();
           const title = interaction.fields.getTextInputValue('title');
           const description = interaction.fields.getTextInputValue('description');
           const color = interaction.fields.getTextInputValue('color').trim();
 
-          if (!name) return interaction.reply({ content: '❌ Embed name is required.', ephemeral: true });
+          if (!name) return interaction.editReply({ content: '❌ اسم الإمبد مطلوب.' });
 
           const validTypes = ['Welcome', 'Goodbye', 'Partner', 'Manual'];
           if (!validTypes.includes(type)) {
-            return interaction.reply({
-              content: `❌ Invalid type. Must be one of: Welcome, Goodbye, Partner, Manual`,
-              ephemeral: true,
+            return interaction.editReply({
+              content: `❌ نوع غير صحيح. يجب أن يكون أحد: Welcome, Goodbye, Partner, Manual`,
             });
           }
 
@@ -435,28 +451,28 @@ export default function EmbedVaultModule(client) {
 
           const errors = validateEmbed(data);
           if (errors.length > 0) {
-            return interaction.reply({
-              content: `❌ Validation errors:\n${errors.map(e => `• ${e}`).join('\n')}`,
-              ephemeral: true,
+            return interaction.editReply({
+              content: `❌ أخطاء في الصحة:\n${errors.map(e => `• ${e}`).join('\n')}`,
             });
           }
 
           const created = await this.upsert(interaction.guildId, name, data, type);
           const previewEmbed = createPreview(buildFullData(created), { member: interaction.member });
 
-          return interaction.reply({
-            content: `## ✏️ Editing: **${created.name}**\n✅ Created! (Type: ${created.type}) Add Author/Footer and Images next.`,
+          return interaction.editReply({
+            content: `## ✏️ جاري التعديل: **${created.name}**\n✅ تم الإنشاء! (النوع: ${created.type}) أضف المؤلف/التذييل والصور بعد ذلك.`,
             embeds: [previewEmbed],
             components: [buildEditorRow(created.name)],
-            ephemeral: true,
           });
         }
 
         // ── Basic Info (edit) ─────────────────────────────────────────────────
         if (customId.startsWith('embedvault_basicinfo_submit:')) {
+          await interaction.deferReply({ ephemeral: true });
+          
           const originalName = customId.split(':')[1];
           const vaultItem = await this.getByName(interaction.guildId, originalName);
-          if (!vaultItem) return interaction.reply({ content: '❌ Embed not found.', ephemeral: true });
+          if (!vaultItem) return interaction.editReply({ content: '❌ لم يتم العثور على الإمبد.' });
 
           const newName = interaction.fields.getTextInputValue('embed_name').trim();
           const newType = interaction.fields.getTextInputValue('embed_type').trim();
@@ -466,9 +482,8 @@ export default function EmbedVaultModule(client) {
 
           const validTypes = ['Welcome', 'Goodbye', 'Partner', 'Manual'];
           if (!validTypes.includes(newType)) {
-            return interaction.reply({
-              content: `❌ Invalid type. Must be one of: Welcome, Goodbye, Partner, Manual`,
-              ephemeral: true,
+            return interaction.editReply({
+              content: `❌ نوع غير صحيح. يجب أن يكون أحد: Welcome, Goodbye, Partner, Manual`,
             });
           }
 
@@ -482,9 +497,8 @@ export default function EmbedVaultModule(client) {
 
           const errors = validateEmbed(updatedData);
           if (errors.length > 0) {
-            return interaction.reply({
-              content: `❌ Validation errors:\n${errors.map(e => `• ${e}`).join('\n')}`,
-              ephemeral: true,
+            return interaction.editReply({
+              content: `❌ أخطاء في الصحة:\n${errors.map(e => `• ${e}`).join('\n')}`,
             });
           }
 
@@ -507,17 +521,219 @@ export default function EmbedVaultModule(client) {
 
           const previewEmbed = createPreview(buildFullData(updated), { member: interaction.member });
 
-          return interaction.reply({
-            content: `## ✏️ Editing: **${updated.name}**\n✅ Basic Info saved! (Type: ${updated.type})`,
+          return interaction.editReply({
+            content: `## ✏️ جاري التعديل: **${updated.name}**\n✅ تم حفظ المعلومات الأساسية! (النوع: ${updated.type})`,
             embeds: [previewEmbed],
             components: [buildEditorRow(updated.name)],
-            ephemeral: true,
           });
+        }
+
+        // ── Author/Footer (create) ────────────────────────────────────────────
+        if (customId === 'embedvault_authorfooter_submit_create') {
+          await interaction.deferReply({ ephemeral: true });
+          
+          const authorName = interaction.fields.getTextInputValue('author_name') || '';
+          const authorIcon = interaction.fields.getTextInputValue('author_icon') || '';
+          const footerText = interaction.fields.getTextInputValue('footer_text') || '';
+          const footerIcon = interaction.fields.getTextInputValue('footer_icon') || '';
+
+          return interaction.editReply({
+            content: '❌ لم يتم العثور على إمبد نشط. ابدأ من إنشاء إمبد أولاً.',
+          });
+        }
+
+        // ── Author/Footer (edit) ──────────────────────────────────────────────
+        if (customId.startsWith('embedvault_authorfooter_submit:')) {
+          await interaction.deferReply({ ephemeral: true });
+          
+          const embedName = customId.split(':')[1];
+          const vaultItem = await this.getByName(interaction.guildId, embedName);
+          if (!vaultItem) return interaction.editReply({ content: '❌ لم يتم العثور على الإمبد.' });
+
+          const authorName = interaction.fields.getTextInputValue('author_name') || '';
+          const authorIcon = interaction.fields.getTextInputValue('author_icon') || '';
+          const footerText = interaction.fields.getTextInputValue('footer_text') || '';
+          const footerIcon = interaction.fields.getTextInputValue('footer_icon') || '';
+
+          const updated = await this.upsert(
+            interaction.guildId,
+            embedName,
+            vaultItem.data,
+            vaultItem.type,
+            {
+              linkedInviteCode: vaultItem.linkedInviteCode,
+              linkedPartnerRole: vaultItem.linkedPartnerRole,
+              authorName,
+              authorIcon,
+              footerText,
+              footerIcon,
+              includeTimestamp: vaultItem.includeTimestamp,
+            }
+          );
+
+          const previewEmbed = createPreview(buildFullData(updated), { member: interaction.member });
+
+          return interaction.editReply({
+            content: `## ✏️ جاري التعديل: **${updated.name}**\n✅ تم حفظ المؤلف/التذييل!`,
+            embeds: [previewEmbed],
+            components: [buildEditorRow(updated.name)],
+          });
+        }
+
+        // ── Images (create) ───────────────────────────────────────────────────
+        if (customId === 'embedvault_images_submit_create') {
+          await interaction.deferReply({ ephemeral: true });
+          
+          return interaction.editReply({
+            content: '❌ لم يتم العثور على إمبد نشط. ابدأ من إنشاء إمبد أولاً.',
+          });
+        }
+
+        // ── Images (edit) ─────────────────────────────────────────────────────
+        if (customId.startsWith('embedvault_images_submit:')) {
+          await interaction.deferReply({ ephemeral: true });
+          
+          const embedName = customId.split(':')[1];
+          const vaultItem = await this.getByName(interaction.guildId, embedName);
+          if (!vaultItem) return interaction.editReply({ content: '❌ لم يتم العثور على الإمبد.' });
+
+          const imageUrl = interaction.fields.getTextInputValue('image_url') || '';
+          const thumbnailUrl = interaction.fields.getTextInputValue('thumbnail_url') || '';
+          const includeTimestampStr = interaction.fields.getTextInputValue('include_timestamp') || 'false';
+          const includeTimestamp = includeTimestampStr.toLowerCase() === 'true';
+
+          const updatedData = JSON.parse(JSON.stringify(vaultItem.data ?? {}));
+          if (imageUrl) {
+            updatedData.image = { url: imageUrl };
+          } else {
+            delete updatedData.image;
+          }
+          if (thumbnailUrl) {
+            updatedData.thumbnail = { url: thumbnailUrl };
+          } else {
+            delete updatedData.thumbnail;
+          }
+
+          const updated = await this.upsert(
+            interaction.guildId,
+            embedName,
+            updatedData,
+            vaultItem.type,
+            {
+              linkedInviteCode: vaultItem.linkedInviteCode,
+              linkedPartnerRole: vaultItem.linkedPartnerRole,
+              authorName: vaultItem.authorName,
+              authorIcon: vaultItem.authorIcon,
+              footerText: vaultItem.footerText,
+              footerIcon: vaultItem.footerIcon,
+              includeTimestamp,
+            }
+          );
+
+          const previewEmbed = createPreview(buildFullData(updated), { member: interaction.member });
+
+          return interaction.editReply({
+            content: `## ✏️ جاري التعديل: **${updated.name}**\n✅ تم حفظ الصور!`,
+            embeds: [previewEmbed],
+            components: [buildEditorRow(updated.name)],
+          });
+        }
+
+        // ── Send Embed (modal submit) ─────────────────────────────────────────
+        if (customId.startsWith('embedvault_send_submit:')) {
+          await interaction.deferReply({ ephemeral: true });
+          
+          const embedName = customId.split(':')[1];
+          const channelId = interaction.fields.getTextInputValue('channel_id').trim();
+          
+          const vaultItem = await this.getByName(interaction.guildId, embedName);
+          if (!vaultItem) return interaction.editReply({ content: '❌ لم يتم العثور على الإمبد.' });
+
+          try {
+            const channel = await interaction.guild.channels.fetch(channelId);
+            if (!channel || !channel.isTextBased()) {
+              return interaction.editReply({ content: '❌ القناة غير صحيحة أو ليست قناة نصية.' });
+            }
+
+            const renderedEmbed = render(buildFullData(vaultItem), { member: interaction.member });
+            const embedToSend = new EmbedBuilder()
+              .setColor(renderedEmbed.color || 0x2f3136)
+              .setTitle(renderedEmbed.title || '')
+              .setDescription(renderedEmbed.description || '')
+              .setAuthor(
+                renderedEmbed.author
+                  ? { name: renderedEmbed.author.name, iconURL: renderedEmbed.author.iconURL }
+                  : null
+              )
+              .setFooter(
+                renderedEmbed.footer
+                  ? { text: renderedEmbed.footer.text, iconURL: renderedEmbed.footer.iconURL }
+                  : null
+              );
+
+            if (renderedEmbed.image) embedToSend.setImage(renderedEmbed.image.url);
+            if (renderedEmbed.thumbnail) embedToSend.setThumbnail(renderedEmbed.thumbnail.url);
+            if (renderedEmbed.timestamp) embedToSend.setTimestamp();
+
+            await channel.send({ embeds: [embedToSend] });
+
+            return interaction.editReply({
+              content: `✅ تم إرسال الإمبد **${embedName}** إلى قناة <#${channelId}> بنجاح!`,
+            });
+          } catch (err) {
+            console.error('[Send Embed Error]', err);
+            return interaction.editReply({
+              content: `❌ فشل في إرسال الإمبد: ${err.message}`,
+            });
+          }
+        }
+
+        // ── Import Embed (modal submit) ───────────────────────────────────────
+        if (customId === 'embedvault_import_submit') {
+          await interaction.deferReply({ ephemeral: true });
+          
+          const jsonString = interaction.fields.getTextInputValue('json_data').trim();
+          
+          try {
+            const importedData = JSON.parse(jsonString);
+            if (!importedData.name) {
+              return interaction.editReply({ content: '❌ بيانات JSON يجب أن تحتوي على حقل "name".' });
+            }
+
+            const errors = validateEmbed(importedData);
+            if (errors.length > 0) {
+              return interaction.editReply({
+                content: `❌ أخطاء في الصحة:\n${errors.map(e => `• ${e}`).join('\n')}`,
+              });
+            }
+
+            const created = await this.upsert(
+              interaction.guildId,
+              importedData.name,
+              importedData,
+              importedData.type || 'Manual'
+            );
+
+            const previewEmbed = createPreview(buildFullData(created), { member: interaction.member });
+
+            return interaction.editReply({
+              content: `## ✏️ جاري التعديل: **${created.name}**\n✅ تم استيراد الإمبد بنجاح!`,
+              embeds: [previewEmbed],
+              components: [buildEditorRow(created.name)],
+            });
+          } catch (err) {
+            console.error('[Import Error]', err);
+            return interaction.editReply({
+              content: `❌ فشل في تحليل JSON: ${err.message}`,
+            });
+          }
         }
       } catch (err) {
         console.error('[EmbedVaultModule.handleModalSubmit]', err);
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-          await interaction.reply({ content: '❌ Embed operation failed.', ephemeral: true });
+          await interaction.reply({ content: '❌ فشلت عملية الإمبد.', ephemeral: true });
+        } else if (interaction.deferred && !interaction.replied) {
+          await interaction.editReply({ content: '❌ فشلت عملية الإمبد.' });
         }
       }
     },
@@ -526,40 +742,40 @@ export default function EmbedVaultModule(client) {
       const isEdit = !!embedDoc;
       const modal = new ModalBuilder()
         .setCustomId(isEdit ? `embedvault_authorfooter_submit:${embedDoc.name}` : 'embedvault_authorfooter_submit_create')
-        .setTitle(isEdit ? `Edit Author/Footer – ${embedDoc.name}` : 'Create – Author/Footer');
+        .setTitle(isEdit ? `تعديل المؤلف/التذييل – ${embedDoc.name}` : 'إنشاء – المؤلف/التذييل');
 
       modal.addComponents(
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('author_name')
-            .setLabel('Author Name')
+            .setLabel('اسم المؤلف')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('`{user.name}` or custom text')
+            .setPlaceholder('`{user.name}` أو نص مخصص')
             .setValue(embedDoc?.authorName ?? '')
         ),
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('author_icon')
-            .setLabel('Author Icon URL (supports `{user.avatar}`)')
+            .setLabel('رابط أيقونة المؤلف (يدعم `{user.avatar}`)')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('`{user.avatar}` or https://…')
+            .setPlaceholder('`{user.avatar}` أو https://…')
             .setValue(embedDoc?.authorIcon ?? '')
         ),
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('footer_text')
-            .setLabel('Footer Text')
+            .setLabel('نص التذييل')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('`{server}` • `{member_count}` members')
+            .setPlaceholder('`{server}` • `{member_count}` أعضاء')
             .setValue(embedDoc?.footerText ?? '')
         ),
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('footer_icon')
-            .setLabel('Footer Icon URL (supports `{server.icon}`)')
+            .setLabel('رابط أيقونة التذييل (يدعم `{server.icon}`)')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
             .setPlaceholder('https://…')
@@ -574,35 +790,73 @@ export default function EmbedVaultModule(client) {
       const isEdit = !!embedDoc;
       const modal = new ModalBuilder()
         .setCustomId(isEdit ? `embedvault_images_submit:${embedDoc.name}` : 'embedvault_images_submit_create')
-        .setTitle(isEdit ? `Edit Images – ${embedDoc.name}` : 'Create – Images');
+        .setTitle(isEdit ? `تعديل الصور – ${embedDoc.name}` : 'إنشاء – الصور');
 
       modal.addComponents(
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('image_url')
-            .setLabel('Image URL (supports placeholders)')
+            .setLabel('رابط الصورة (يدعم الدوال المشروطة)')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('https://… or `{user.avatar}`')
+            .setPlaceholder('https://… أو `{user.avatar}`')
             .setValue(embedDoc?.data?.image?.url ?? '')
         ),
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('thumbnail_url')
-            .setLabel('Thumbnail URL (supports placeholders)')
+            .setLabel('رابط الصورة المصغّرة (يدعم الدوال المشروطة)')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('https://… or `{user.avatar}`')
+            .setPlaceholder('https://… أو `{user.avatar}`')
             .setValue(embedDoc?.data?.thumbnail?.url ?? '')
         ),
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('include_timestamp')
-            .setLabel('Include Timestamp? (true / false)')
+            .setLabel('هل تريد تضمين الطابع الزمني؟ (true / false)')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('true or false')
+            .setPlaceholder('true أو false')
             .setValue(embedDoc?.includeTimestamp ? 'true' : 'false')
+        )
+      );
+
+      await interaction.showModal(modal);
+    },
+
+    async openSendModal(interaction, embedDoc) {
+      const modal = new ModalBuilder()
+        .setCustomId(`embedvault_send_submit:${embedDoc.name}`)
+        .setTitle(`إرسال الإمبد – ${embedDoc.name}`);
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('channel_id')
+            .setLabel('معرّف القناة')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true)
+            .setPlaceholder('أدخل معرّف القناة أو رابطها')
+        )
+      );
+
+      await interaction.showModal(modal);
+    },
+
+    async openImportModal(interaction) {
+      const modal = new ModalBuilder()
+        .setCustomId('embedvault_import_submit')
+        .setTitle('استيراد إمبد من JSON');
+
+      modal.addComponents(
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('json_data')
+            .setLabel('بيانات JSON')
+            .setStyle(TextInputStyle.Paragraph)
+            .setRequired(true)
+            .setPlaceholder('الصق بيانات JSON المُصدّرة للإمبد هنا')
         )
       );
 
@@ -611,20 +865,20 @@ export default function EmbedVaultModule(client) {
 
     async openLivePreviewModal(interaction, embedDoc) {
       if (!embedDoc) {
-        return interaction.reply({ content: '❌ No embed data to preview.', ephemeral: true });
+        return interaction.reply({ content: '❌ لا توجد بيانات إمبد للمعاينة.', ephemeral: true });
       }
 
       try {
         const previewEmbed = createPreview(buildFullData(embedDoc), { member: interaction.member });
 
         return interaction.reply({
-          content: `## 👁️ Live Preview — **${embedDoc.name}**\n*Placeholders rendered with your account data.*`,
+          content: `## 👁️ معاينة مباشرة — **${embedDoc.name}**\n*الدوال المشروطة مرسومة ببيانات حسابك.*`,
           embeds: [previewEmbed],
           ephemeral: true,
         });
       } catch (err) {
         console.error('[EmbedVaultModule.openLivePreviewModal]', err);
-        return interaction.reply({ content: '❌ Failed to generate preview.', ephemeral: true });
+        return interaction.reply({ content: '❌ فشل في إنشاء المعاينة.', ephemeral: true });
       }
     },
 

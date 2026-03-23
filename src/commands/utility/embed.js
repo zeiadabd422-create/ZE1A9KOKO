@@ -85,10 +85,10 @@ export default {
       const sub = interaction.options.getSubcommand();
 
       if (!interaction.memberPermissions?.has('Administrator')) {
-        return interaction.reply({ content: '❌ Admin permission required.', ephemeral: true });
+        return interaction.reply({ content: '❌ مطلوب صلاحية المسؤول.', ephemeral: true });
       }
       if (!client.embedVault) {
-        return interaction.reply({ content: '❌ EmbedVault module is not loaded.', ephemeral: true });
+        return interaction.reply({ content: '❌ لم يتم تحميل وحدة EmbedVault.', ephemeral: true });
       }
 
       if (sub === 'manager') {
@@ -103,7 +103,7 @@ export default {
         // Validate invite code format
         if (inviteCode.length < 2) {
           return interaction.reply({
-            content: '❌ Invalid invite code format.',
+            content: '❌ صيغة رمز الدعوة غير صحيحة.',
             ephemeral: true,
           });
         }
@@ -116,14 +116,14 @@ export default {
         );
         if (!updated) {
           return interaction.reply({
-            content: `❌ Embed **${name}** not found in vault.`,
+            content: `❌ لم يتم العثور على الإمبد **${name}** في الخزنة.`,
             ephemeral: true,
           });
         }
 
-        let confirmMsg = `✅ Bound **${updated.name}** to invite code: \`${inviteCode}\`\nWhen members use this invite to join, this embed will be sent!`;
+        let confirmMsg = `✅ تم ربط **${updated.name}** برمز الدعوة: \`${inviteCode}\`\nعندما يستخدم الأعضاء رمز الدعوة هذا للانضمام، سيتم إرسال هذا الإمبد!`;
         if (partnerRole) {
-          confirmMsg += `\n🔗 Partner Role linked: ${partnerRole}`;
+          confirmMsg += `\n🔗 دور الشريك المرتبط: ${partnerRole}`;
         }
 
         return interaction.reply({
@@ -138,23 +138,23 @@ export default {
 
         if (!deleted) {
           return interaction.reply({
-            content: `❌ Embed **${name}** not found in vault.`,
+            content: `❌ لم يتم العثور على الإمبد **${name}** في الخزنة.`,
             ephemeral: true,
           });
         }
 
         return interaction.reply({
-          content: `✅ Deleted **${name}** from vault.`,
+          content: `✅ تم حذف **${name}** من الخزنة.`,
           ephemeral: true,
         });
       }
 
-      return interaction.reply({ content: 'Unknown subcommand.', ephemeral: true });
+      return interaction.reply({ content: 'أمر فرعي غير معروف.', ephemeral: true });
     } catch (err) {
       console.error('[embed command] Error:', err);
       try {
         if (interaction.isRepliable() && !interaction.replied) {
-          await interaction.reply({ content: 'An error occurred processing the embed command.', ephemeral: true });
+          await interaction.reply({ content: 'حدث خطأ في معالجة أمر الإمبد.', ephemeral: true });
         }
       } catch (e) {
         console.error('[embed command] Reply error:', e);
