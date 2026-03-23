@@ -3,15 +3,15 @@ import { SlashCommandBuilder } from 'discord.js';
 export default {
   data: new SlashCommandBuilder()
     .setName('goodbye')
-    .setDescription('Configure goodbye message channel')
+    .setDescription('تكوين قناة رسالة الوداع • Configure goodbye message channel')
     .addSubcommand(subcommand =>
       subcommand
         .setName('setup')
-        .setDescription('Set the goodbye channel')
+        .setDescription('تعيين قناة الوداع • Set the goodbye channel')
         .addChannelOption(option =>
           option
             .setName('channel')
-            .setDescription('Channel to post goodbye messages')
+            .setDescription('القناة لنشر رسائل الوداع • Channel to post goodbye messages')
             .setRequired(true)
         )
     ),

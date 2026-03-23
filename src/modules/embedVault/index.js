@@ -107,6 +107,16 @@ export default function EmbedVaultModule(client) {
       return doc.save();
     },
 
+    async bindInviteWithRole(guildId, name, inviteCode, partnerRoleId) {
+      const doc = await EmbedVault.findOne({ guildId, name: name.trim() });
+      if (!doc) return null;
+      doc.linkedInviteCode = inviteCode.trim();
+      if (partnerRoleId) {
+        doc.linkedPartnerRole = partnerRoleId;
+      }
+      return doc.save();
+    },
+
     async openManager(interaction) {
       try {
         const embeds = await this.list(interaction.guildId);

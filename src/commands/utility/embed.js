@@ -1,31 +1,83 @@
 import { SlashCommandBuilder } from 'discord.js';
 
+// Autocomplete handler function
+async function handleNameAutocomplete(interaction) {
+  try {
+    if (!interaction.client.embedVault) {
+      await interaction.respond([]);
+      return;
+    }
+
+    const embeds = await interaction.client.embedVault.list(interaction.guildId);
+    const focusedValue = interaction.options.getFocused();
+
+    const filtered = embeds
+      .filter(embed => embed.name.toLowerCase().includes(focusedValue.toLowerCase()))
+      .slice(0, 25)
+      .map(embed => ({
+        name: embed.name.length > 50 ? embed.name.substring(0, 47) + '...' : embed.name,
+        value: embed.name,
+      }));
+
+    await interaction.respond(filtered);
+  } catch (err) {
+    console.error('[embed autocomplete] Error:', err);
+    await interaction.respond([]).catch(() => {});
+  }
+}
+
 export default {
   data: new SlashCommandBuilder()
     .setName('embed')
-    .setDescription('Manage embed vault with visual editor')
+    .setDescription('إدارة قبو الإيمبد مع محرر مرئي • Manage embed vault with visual editor')
     .addSubcommand(subcommand =>
-      subcommand.setName('manager').setDescription('Open visual embed manager')
+      subcommand
+        .setName('manager')
+        .setDescription('فتح مدير الإيمبد المرئي • Open visual embed manager')
     )
     .addSubcommand(subcommand =>
       subcommand
         .setName('bind')
-        .setDescription('Link an embed to an invite code for partner tracking')
+        .setDescription('ربط إيمبد برمز دعوة للتتبع الشريك • Link embed to invite code for partner tracking')
         .addStringOption(option =>
-          option.setName('name').setDescription('Embed name').setRequired(true)
+          option
+            .setName('name')
+            .setDescription('اسم الإيمبد • Embed name')
+            .setRequired(true)
+            .setAutocomplete(true)
         )
         .addStringOption(option =>
-          option.setName('invite_code').setDescription('Discord invite code').setRequired(true)
+          option
+            .setName('invite_code')
+            .setDescription('رمز الدعوة إلى Discord • Discord invite code')
+            .setRequired(true)
+        )
+        .addRoleOption(option =>
+          option
+            .setName('partner_role')
+            .setDescription('دور الشريك (اختياري) • Partner role (optional)')
+            .setRequired(false)
         )
     )
     .addSubcommand(subcommand =>
       subcommand
         .setName('delete')
-        .setDescription('Delete an embed from the vault')
+        .setDescription('حذف إيمبد من الخزنة الإمبراطورية • Delete an embed from the vault')
         .addStringOption(option =>
-          option.setName('name').setDescription('Embed name to delete').setRequired(true)
+          option
+            .setName('name')
+            .setDescription('اسم الإيمبد المراد حذفه • Embed name to delete')
+            .setRequired(true)
+            .setAutocomplete(true)
         )
     ),
+
+  async autocomplete(interaction) {
+    const option = interaction.options.getFocused(true);
+    if (option.name === 'name') {
+      await handleNameAutocomplete(interaction);
+    }
+  },
 
   async execute(interaction) {
     try {
@@ -46,6 +98,7 @@ export default {
       if (sub === 'bind') {
         const name = interaction.options.getString('name').trim();
         const inviteCode = interaction.options.getString('invite_code').trim();
+        const partnerRole = interaction.options.getRole('partner_role');
 
         // Validate invite code format
         if (inviteCode.length < 2) {
@@ -55,7 +108,12 @@ export default {
           });
         }
 
-        const updated = await client.embedVault.bindInvite(interaction.guildId, name, inviteCode);
+        const updated = await client.embedVault.bindInviteWithRole(
+          interaction.guildId,
+          name,
+          inviteCode,
+          partnerRole?.id || null
+        );
         if (!updated) {
           return interaction.reply({
             content: `❌ Embed **${name}** not found in vault.`,
@@ -63,8 +121,13 @@ export default {
           });
         }
 
+        let confirmMsg = `✅ Bound **${updated.name}** to invite code: \`${inviteCode}\`\nWhen members use this invite to join, this embed will be sent!`;
+        if (partnerRole) {
+          confirmMsg += `\n🔗 Partner Role linked: ${partnerRole}`;
+        }
+
         return interaction.reply({
-          content: `✅ Bound **${updated.name}** to invite code: \`${inviteCode}\`\nWhen members use this invite to join, this embed will be sent!`,
+          content: confirmMsg,
           ephemeral: true,
         });
       }

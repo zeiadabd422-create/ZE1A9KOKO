@@ -8,6 +8,18 @@ export default {
 
       // ── Autocomplete ────────────────────────────────────────────────────────
       if (interaction.isAutocomplete?.()) {
+        const command = client.commands.get(interaction.commandName);
+        if (command?.autocomplete) {
+          try {
+            await command.autocomplete(interaction);
+          } catch (err) {
+            console.error(`[Autocomplete: ${interaction.commandName}] Error:`, err);
+            await interaction.respond([]).catch(() => {});
+          }
+          return;
+        }
+
+        // Fallback for embed command if no command-level autocomplete is defined
         if (interaction.commandName === 'embed' && client.embedVault) {
           const focused = interaction.options.getFocused(true);
           if (focused.name === 'name') {

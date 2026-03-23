@@ -4,11 +4,11 @@ import { render } from '../../core/embedEngine.js';
 export default {
   data: new SlashCommandBuilder()
     .setName('embed_preview')
-    .setDescription('Preview an embed from a raw JSON string.')
+    .setDescription('معاينة إيمبد من كود JSON • Preview an embed from a raw JSON string.')
     .addStringOption(option =>
       option
         .setName('json')
-        .setDescription('The JSON definition of the embed.')
+        .setDescription('تعريف الإيمبد بصيغة JSON • The JSON definition of the embed.')
         .setRequired(true)
     ),
 

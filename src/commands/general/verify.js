@@ -3,7 +3,9 @@ import GatewayConfig from '../../modules/gateway/schema.js';
 import { verifyMember, createEmbed, DEFAULT_ID_CARD, startDMVerification, getLockdownResponse } from '../../modules/gateway/actions.js';
 
 export default {
-  data: new SlashCommandBuilder().setName('verify').setDescription('Run the verification flow.'),
+  data: new SlashCommandBuilder()
+    .setName('verify')
+    .setDescription('بدء عملية التحقق • Run the verification flow.'),
   async execute(interaction) {
     try {
       const { guild, member } = interaction;

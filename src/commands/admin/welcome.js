@@ -3,36 +3,36 @@ import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, But
 export default {
   data: new SlashCommandBuilder()
     .setName('welcome')
-    .setDescription('Welcome & goodbye module administration - Configure member onboarding')
+    .setDescription('إدارة نظام الترحيب والوداع • Welcome & goodbye module administration')
     .addSubcommand(subcommand =>
       subcommand
         .setName('setup')
-        .setDescription('Set the welcome channel and auto-role (Unverified)')
+        .setDescription('إعداد قناة الترحيب ودور الأعضاء الجدد • Set the welcome channel and auto-role')
         .addChannelOption(option =>
           option
             .setName('channel')
-            .setDescription('Channel to post welcome messages (required)')
+            .setDescription('القناة لنشر رسائل الترحيب • Channel to post welcome messages')
             .setRequired(true)
         )
         .addRoleOption(option =>
           option
             .setName('auto_role')
-            .setDescription('Role to assign new members (usually "Unverified")')
+            .setDescription('الدور الممنوح للأعضاء الجدد • Role to assign new members')
             .setRequired(true)
         )
     )
     .addSubcommand(subcommand =>
       subcommand
         .setName('edit')
-        .setDescription('Edit welcome or goodbye messages with Mimu-style editor')
+        .setDescription('تعديل رسائل الترحيب أو الوداع • Edit welcome or goodbye messages')
         .addStringOption(option =>
           option
             .setName('embed_type')
-            .setDescription('Which embed to edit')
+            .setDescription('أي رسالة للتعديل • Which embed to edit')
             .setRequired(true)
             .addChoices(
-              { name: '👋 Welcome', value: 'welcome' },
-              { name: '👋 Goodbye', value: 'goodbye' }
+              { name: '👋 ترحيب • Welcome', value: 'welcome' },
+              { name: '👋 وداع • Goodbye', value: 'goodbye' }
             )
         )
     ),
