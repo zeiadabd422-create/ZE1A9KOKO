@@ -3,35 +3,37 @@ import {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
+  StringSelectMenuBuilder,
 } from 'discord.js';
 
 /**
- * Manages embed selection UI with proper interaction handling
- * No timeout collectors - uses persistent button routing through interactionCreate event
+ * Manages embed selection UI with professional Select Menu interface
+ * Select Menu Revolution: Single dropdown instead of button grid
+ * Compliant with Discord limits (1 menu row + 1 action row = 2 rows total)
  */
 export default function EmbedManagerModule() {
   return {
     embedVaultModule: null, // Will be injected by index.js
 
     /**
-     * Display premium button grid for embed selection
+     * Display professional Select Menu dashboard for embed management
      */
     async displayManager(interaction, page = 0) {
       try {
         if (!this.embedVaultModule) {
-          return interaction.reply({ content: '❌ Embed vault not initialized.', ephemeral: true });
+          return interaction.reply({ content: '❌ خزنة الإمبد لم تُهيّأ.', ephemeral: true });
         }
 
         const embeds = await this.embedVaultModule.list(interaction.guildId);
 
         if (!embeds || embeds.length === 0) {
           return interaction.reply({
-            content: '📦 **Embed Vault Empty**\nCreate your first embed to get started!',
+            content: '📦 خزنة الإمبد فارغة\nأنشئ إمبدك الأول للبدء!',
             components: [
               new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
                   .setCustomId('embedvault_create')
-                  .setLabel('➕ Create First Embed')
+                  .setLabel('➕ إنشاء أول إمبد')
                   .setStyle(ButtonStyle.Primary)
               ),
             ],
@@ -39,67 +41,66 @@ export default function EmbedManagerModule() {
           });
         }
 
-        // Pagination settings
-        const buttonsPerPage = 6;
-        const totalPages = Math.ceil(embeds.length / buttonsPerPage);
-        const startIdx = page * buttonsPerPage;
-        const pageEmbeds = embeds.slice(startIdx, startIdx + buttonsPerPage);
+        // Pagination settings - show all embeds up to 25 (Discord select menu limit)
+        const itemsPerPage = 25;
+        const totalPages = Math.ceil(embeds.length / itemsPerPage);
+        const startIdx = page * itemsPerPage;
+        const pageEmbeds = embeds.slice(startIdx, startIdx + itemsPerPage);
 
-        // Build button grid (3 columns, 2 rows max)
-        const rows = [];
-        for (let i = 0; i < pageEmbeds.length; i += 3) {
-          const rowButtons = pageEmbeds.slice(i, i + 3).map(embed => {
-            const label = embed.name.length > 15 ? embed.name.substring(0, 12) + '…' : embed.name;
-            const icon = embed.linkedInviteCode ? '🔗' : '📦';
-            return new ButtonBuilder()
-              .setCustomId(`embedvault_select:${embed.name}`)
-              .setLabel(`${icon} ${label}`)
-              .setStyle(ButtonStyle.Secondary);
-          });
-          rows.push(new ActionRowBuilder().addComponents(rowButtons));
-        }
+        // Build Select Menu with all embeds on current page
+        const selectOptions = pageEmbeds.map(embed => ({
+          label: embed.name.length > 100 ? embed.name.substring(0, 97) + '…' : embed.name,
+          value: embed.name,
+          description: embed.linkedInviteCode ? `🔗 مرتبط برمز دعوة • Linked to invite` : `📦 إمبد عام • Generic embed`,
+          emoji: embed.linkedInviteCode ? '🔗' : '📦',
+        }));
 
-        // Premium header embed
-        const headerEmbed = new EmbedBuilder()
+        const selectMenu = new StringSelectMenuBuilder()
+          .setCustomId('embedvault_select')
+          .setPlaceholder('اختر الإيمبد الذي ترغب في إدارته....')
+          .addOptions(selectOptions);
+
+        const menuRow = new ActionRowBuilder().addComponents(selectMenu);
+
+        // Dashboard header embed
+        const dashboardEmbed = new EmbedBuilder()
           .setColor(0x5865F2)
-          .setTitle('📦 Embed Manager – Premium Interface')
-          .setDescription(`**${embeds.length}** embed(s) in vault\n**Page ${page + 1}/${totalPages}** — Select an embed to manage`)
-          .setFooter({ text: '✨ Click an embed to edit • Use pagination to browse' });
+          .setTitle('📦 لوحة تحكم الخزنة الإمبراطورية')
+          .setDescription(`**${embeds.length}** إمبد في الخزنة\n**الصفحة ${page + 1}/${totalPages}** — استخدم القائمة أدناه`)
+          .setFooter({ text: '⚙️ نظام إدارة الإمبد المتقدم • Advanced Embed Management System' });
 
-        // Pagination + action buttons
-        const paginationRow = new ActionRowBuilder().addComponents(
+        // Navigation and utility buttons (compliant with Discord limits)
+        const utilityRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId(`embedvault_manager_prev:${page}`)
-            .setLabel('⬅️ Prev')
+            .setLabel('⬅️ السابق')
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(page === 0),
           new ButtonBuilder()
             .setCustomId('embedvault_create')
-            .setLabel('➕ New')
+            .setLabel('➕ إنشاء جديد')
             .setStyle(ButtonStyle.Success),
           new ButtonBuilder()
             .setCustomId('embedvault_import')
-            .setLabel('📥 Import')
-            .setStyle(ButtonStyle.Secondary),
+            .setLabel('📥 استيراد JSON')
+            .setStyle(ButtonStyle.Primary),
           new ButtonBuilder()
             .setCustomId(`embedvault_manager_next:${page}`)
-            .setLabel('Next ➡️')
+            .setLabel('التالي ➡️')
             .setStyle(ButtonStyle.Secondary)
             .setDisabled(page >= totalPages - 1)
         );
 
-        rows.push(paginationRow);
-
         return interaction.reply({
-          embeds: [headerEmbed],
-          components: rows,
+          embeds: [dashboardEmbed],
+          components: [menuRow, utilityRow],
           ephemeral: true,
         });
       } catch (err) {
         console.error('[EmbedManager.displayManager] Error:', err);
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
           await interaction.reply({
-            content: '❌ Failed to load embed manager.',
+            content: '❌ فشل تحميل لوحة التحكم.',
             ephemeral: true,
           });
         }
@@ -107,19 +108,21 @@ export default function EmbedManagerModule() {
     },
 
     /**
-     * Handle embed selection from button grid
+     * Handle embed selection from Select Menu
      */
     async handleSelectEmbed(interaction, embedName) {
       try {
+        await interaction.deferUpdate();
+        
         if (!this.embedVaultModule) {
-          return interaction.reply({ content: '❌ Embed vault not initialized.', ephemeral: true });
+          return await interaction.editReply({ content: '❌ خزنة الإمبد لم تُهيّأ.', components: [] });
         }
 
         const embedDoc = await this.embedVaultModule.getByName(interaction.guildId, embedName);
         if (!embedDoc) {
-          return interaction.reply({
-            content: `❌ Embed **${embedName}** not found.`,
-            ephemeral: true,
+          return await interaction.editReply({
+            content: `❌ لم يتم العثور على الإمبد **${embedName}**.`,
+            components: [],
           });
         }
 
@@ -129,7 +132,7 @@ export default function EmbedManagerModule() {
         console.error('[EmbedManager.handleSelectEmbed] Error:', err);
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
           await interaction.reply({
-            content: '❌ Failed to select embed.',
+            content: '❌ فشل اختيار الإمبد.',
             ephemeral: true,
           });
         }
@@ -137,19 +140,19 @@ export default function EmbedManagerModule() {
     },
 
     /**
-     * Update embed manager by editing the existing reply (safe for pagination)
+     * Update embed manager dashboard with Select Menu (safe for pagination)
      */
     async updateManager(interaction, page = 0) {
       try {
         if (!this.embedVaultModule) {
-          return await interaction.editReply({ content: '❌ Embed vault not initialized.', components: [] });
+          return await interaction.editReply({ content: '❌ خزنة الإمبد لم تُهيّأ.', components: [] });
         }
 
         const embeds = await this.embedVaultModule.list(interaction.guildId);
 
         if (!embeds || embeds.length === 0) {
           return await interaction.editReply({
-            content: '📦 **Embed Vault Empty**\nCreate your first embed to get started!',
+            content: '📦 خزنة الإمبد فارغة\nأنشئ إمبدك الأول للبدء!',
             components: [
               new ActionRowBuilder().addComponents(
                 new ButtonBuilder()
@@ -161,35 +164,36 @@ export default function EmbedManagerModule() {
           });
         }
 
-        // Pagination settings
-        const buttonsPerPage = 6;
-        const totalPages = Math.ceil(embeds.length / buttonsPerPage);
-        const startIdx = page * buttonsPerPage;
-        const pageEmbeds = embeds.slice(startIdx, startIdx + buttonsPerPage);
+        // Pagination settings - 25 items per page (Discord select menu limit)
+        const itemsPerPage = 25;
+        const totalPages = Math.ceil(embeds.length / itemsPerPage);
+        const startIdx = page * itemsPerPage;
+        const pageEmbeds = embeds.slice(startIdx, startIdx + itemsPerPage);
 
-        // Build button grid (3 columns, 2 rows max)
-        const rows = [];
-        for (let i = 0; i < pageEmbeds.length; i += 3) {
-          const rowButtons = pageEmbeds.slice(i, i + 3).map(embed => {
-            const label = embed.name.length > 15 ? embed.name.substring(0, 12) + '…' : embed.name;
-            const icon = embed.linkedInviteCode ? '🔗' : '📦';
-            return new ButtonBuilder()
-              .setCustomId(`embedvault_select:${embed.name}`)
-              .setLabel(`${icon} ${label}`)
-              .setStyle(ButtonStyle.Secondary);
-          });
-          rows.push(new ActionRowBuilder().addComponents(rowButtons));
-        }
+        // Build Select Menu with embeds on current page
+        const selectOptions = pageEmbeds.map(embed => ({
+          label: embed.name.length > 100 ? embed.name.substring(0, 97) + '…' : embed.name,
+          value: embed.name,
+          description: embed.linkedInviteCode ? `🔗 مرتبط برمز دعوة • Linked to invite` : `📦 إمبد عام • Generic embed`,
+          emoji: embed.linkedInviteCode ? '🔗' : '📦',
+        }));
 
-        // Premium header embed
-        const headerEmbed = new EmbedBuilder()
+        const selectMenu = new StringSelectMenuBuilder()
+          .setCustomId('embedvault_select')
+          .setPlaceholder('اختر الإيمبد الذي ترغب في إدارته....')
+          .addOptions(selectOptions);
+
+        const menuRow = new ActionRowBuilder().addComponents(selectMenu);
+
+        // Dashboard header embed with Arabic title
+        const dashboardEmbed = new EmbedBuilder()
           .setColor(0x5865F2)
-          .setTitle('📦 مدير الإيمبد – واجهة البريميوم')
-          .setDescription(`**${embeds.length}** إيمبد(s) في الخزنة\n**الصفحة ${page + 1}/${totalPages}** — اختر إيمبد للإدارة`)
-          .setFooter({ text: '✨ انقر على إيمبد للتعديل • استخدم الترقيم للتصفح' });
+          .setTitle('📦 لوحة تحكم الخزنة الإمبراطورية')
+          .setDescription(`**${embeds.length}** إمبد في الخزنة\n**الصفحة ${page + 1}/${totalPages}** — استخدم القائمة أدناه`)
+          .setFooter({ text: '⚙️ نظام إدارة الإمبد المتقدم • Advanced Embed Management System' });
 
-        // Pagination + action buttons
-        const paginationRow = new ActionRowBuilder().addComponents(
+        // Navigation and utility buttons (compliant with Discord 5-per-row limit)
+        const utilityRow = new ActionRowBuilder().addComponents(
           new ButtonBuilder()
             .setCustomId(`embedvault_manager_prev:${page}`)
             .setLabel('⬅️ السابق')
@@ -197,12 +201,12 @@ export default function EmbedManagerModule() {
             .setDisabled(page === 0),
           new ButtonBuilder()
             .setCustomId('embedvault_create')
-            .setLabel('➕ جديد')
+            .setLabel('➕ إنشاء جديد')
             .setStyle(ButtonStyle.Success),
           new ButtonBuilder()
             .setCustomId('embedvault_import')
-            .setLabel('📥 استيراد')
-            .setStyle(ButtonStyle.Secondary),
+            .setLabel('📥 استيراد JSON')
+            .setStyle(ButtonStyle.Primary),
           new ButtonBuilder()
             .setCustomId(`embedvault_manager_next:${page}`)
             .setLabel('التالي ➡️')
@@ -210,11 +214,9 @@ export default function EmbedManagerModule() {
             .setDisabled(page >= totalPages - 1)
         );
 
-        rows.push(paginationRow);
-
         return await interaction.editReply({
-          embeds: [headerEmbed],
-          components: rows,
+          embeds: [dashboardEmbed],
+          components: [menuRow, utilityRow],
         });
       } catch (err) {
         console.error('[EmbedManager.updateManager] Error:', err);
@@ -222,17 +224,19 @@ export default function EmbedManagerModule() {
     },
 
     /**
-     * Handle pagination requests
+     * Handle pagination requests with proper deferUpdate
      */
     async handlePagination(interaction, direction, currentPage) {
       try {
+        await interaction.deferUpdate();
+        
         if (!this.embedVaultModule) {
-          return interaction.reply({ content: '❌ Embed vault not initialized.', ephemeral: true });
+          return await interaction.editReply({ content: '❌ خزنة الإمبد لم تُهيّأ.', components: [] });
         }
 
         const embeds = await this.embedVaultModule.list(interaction.guildId);
-        const buttonsPerPage = 6;
-        const totalPages = Math.ceil(embeds.length / buttonsPerPage);
+        const itemsPerPage = 25;
+        const totalPages = Math.ceil(embeds.length / itemsPerPage);
 
         let newPage = currentPage;
         if (direction === 'next') {
@@ -241,8 +245,7 @@ export default function EmbedManagerModule() {
           newPage = Math.max(currentPage - 1, 0);
         }
 
-        // Defer update, then use updateManager to edit reply safely
-        await interaction.deferUpdate();
+        // Update manager with new page using editReply (safe after defer)
         await this.updateManager(interaction, newPage);
       } catch (err) {
         console.error('[EmbedManager.handlePagination] Error:', err);

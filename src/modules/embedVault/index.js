@@ -296,24 +296,27 @@ export default function EmbedVaultModule(client) {
 
     async handleSelectMenu(interaction) {
       try {
+        await interaction.deferUpdate();
+        
         if (!interaction.isStringSelectMenu()) return;
         if (interaction.customId !== 'embedvault_select') return;
 
         const selectedName = interaction.values?.[0];
         if (!selectedName) {
-          return interaction.reply({ content: '❌ No embed selected.', ephemeral: true });
+          return await interaction.editReply({ content: '❌ لم يتم تحديد إمبد.', components: [] });
         }
 
         const embedDoc = await this.getByName(interaction.guildId, selectedName);
         if (!embedDoc) {
-          return interaction.reply({ content: `❌ Embed not found: **${selectedName}**`, ephemeral: true });
+          return await interaction.editReply({ content: `❌ لم يتم العثور على الإمبد: **${selectedName}**`, components: [] });
         }
 
+        // Open modular editor - this will use reply which is safe after deferUpdate
         await this.openModularEditor(interaction, embedDoc);
       } catch (err) {
         console.error('[EmbedVaultModule.handleSelectMenu]', err);
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-          await interaction.reply({ content: '❌ Failed to select embed.', ephemeral: true });
+          await interaction.reply({ content: '❌ فشل اختيار الإمبد.', ephemeral: true });
         }
       }
     },
