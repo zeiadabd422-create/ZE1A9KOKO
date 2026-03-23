@@ -23,7 +23,7 @@ export default {
         if (payload.embeds && Array.isArray(payload.embeds)) payload = payload.embeds[0];
       } catch {
         return interaction.reply({
-          content: '❌ **Invalid JSON:** تأكد من كتابة الكود بصيغة JSON صحيحة.',
+          content: '❌ Invalid JSON: تأكد من كتابة الكود بصيغة JSON صحيحة.',
           ephemeral: true,
         });
       }
