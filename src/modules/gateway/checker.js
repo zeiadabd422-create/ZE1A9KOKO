@@ -1,14 +1,3 @@
-/**
- * Gateway Checker Module
- * Handles trust score calculation, penalties, trigger word validation, and raid shield checks
- */
-
-/**
- * Calculate Trust Score for a user
- * @param {Object} user - Discord user object
- * @param {Object} config - Gateway config from database
- * @returns {number} Trust score (0-100)
- */
 export function calculateTrustScore(user, config) {
   let score = 30; // Initial score
 

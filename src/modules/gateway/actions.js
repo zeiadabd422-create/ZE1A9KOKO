@@ -1,9 +1,3 @@
-/**
- * ─── src/modules/gateway/actions.js ──────────────────────────────────────────
- * ALYA BOT — GATEWAY ACTIONS (IRONCLAD)
- * الجمع بين منطق v2 الكامل + إصلاحات v4 الصحيحة
- */
-
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { validateRaidShield } from './checker.js';
 import { parseColor } from '../../utils/parseColor.js';

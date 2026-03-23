@@ -1,9 +1,3 @@
-/**
- * ─── src/core/TaskScheduler.js ────────────────────────────────────────────────
- * GUARDIAN V2 - GLOBAL TASK SCHEDULER (IRONCLAD)
- * المصدر: مراجعة المدير التقني لضمان استقرار المهام الخلفية
- */
-
 import mongoose from 'mongoose';
 import GatewayConfig from '../modules/gateway/schema.js';
 

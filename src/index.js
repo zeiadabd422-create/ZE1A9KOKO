@@ -1,9 +1,3 @@
-/**
- * ─── src/index.js ─────────────────────────────────────────────────────────────
- * GUARDIAN V2 - GLOBAL ENTRY POINT (IRONCLAD)
- * المصدر: مراجعة المدير التقني لضمان الإقلاع الاحترافي والحماية القصوى
- */
-
 import { Client, GatewayIntentBits, Collection, Partials } from 'discord.js';
 import dotenv from 'dotenv';
 import { connectDatabase } from './core/database.js';

@@ -1,9 +1,3 @@
-/**
- * ─── src/commands/utility/embedHelp.js ───────────────────────────────────────
- * Placeholder reference for Embed Engine V3.
- * Every entry here is synced 1:1 with src/core/embedEngine.js.
- */
-
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 
 // ─── Colour palette ───────────────────────────────────────────────────────────

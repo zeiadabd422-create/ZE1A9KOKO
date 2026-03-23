@@ -1,8 +1,3 @@
-/**
- * Gateway Admin Command - Multi-Method Concurrent Setup
- * All methods (Button, Trigger, Slash, Join) can be active simultaneously
- */
-
 import { SlashCommandBuilder, EmbedBuilder } from 'discord.js';
 import GatewayConfig from '../../modules/gateway/schema.js';
 import { createEmbed } from '../../modules/gateway/actions.js';

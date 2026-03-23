@@ -1,9 +1,3 @@
-/**
- * ─── src/loaders/commands.js ──────────────────────────────────────────────────
- * GUARDIAN V2 - RECURSIVE GLOBAL LOADER
- * المصدر: مراجعة المدير التقني لضمان دعم الأقسام (Categories) تلقائياً
- */
-
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath, pathToFileURL } from 'url';
