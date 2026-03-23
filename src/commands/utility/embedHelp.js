@@ -63,10 +63,12 @@ function pageFooter(interaction, page, total) {
 
 // ─── Page builders ────────────────────────────────────────────────────────────
 
+const PAGE_COLORS = [0x5865F2, 0xFEE75C, 0x2f3136]; // Blurple, Gold, Dark Grey
+
 export function buildPages(interaction) {
   // ── Page 1: Basic Placeholders (User/Server) ───────────────────────────────
   const p1 = new EmbedBuilder()
-    .setColor(0x5865F2)
+    .setColor(PAGE_COLORS[0])
     .setTitle('📖 Basic Placeholders (User/Server)')
     .setDescription(
       'Placeholders are replaced with **live data** when an embed is sent or previewed.\n' +
@@ -82,7 +84,7 @@ export function buildPages(interaction) {
 
   // ── Page 2: Advanced Data (Join Position, Account Age, Timestamps) ───────
   const p2 = new EmbedBuilder()
-    .setColor(0x5865F2)
+    .setColor(PAGE_COLORS[1])
     .setTitle('📖 Advanced Data (Join Position, Account Age, Timestamps)')
     .addFields(
       { name: '🎖️ Member', value: fmt(PLACEHOLDERS.member), inline: false },
@@ -93,7 +95,7 @@ export function buildPages(interaction) {
 
   // ── Page 3: Dynamic Logic (Random Choice {choose}) ───────────────────────
   const p3 = new EmbedBuilder()
-    .setColor(0x5865F2)
+    .setColor(PAGE_COLORS[2])
     .setTitle('📖 Dynamic Logic (Random Choice {choose})')
     .setDescription('Copy-paste ready examples with dynamic placeholders.\n\u200b')
     .addFields(
@@ -115,6 +117,27 @@ export function buildPages(interaction) {
 
 // ─── Command ──────────────────────────────────────────────────────────────────
 
+function buildButtonRow(currentPage, totalPages) {
+  const prevButton = new ButtonBuilder()
+    .setCustomId('help_prev')
+    .setLabel('⬅️ Previous')
+    .setStyle(ButtonStyle.Secondary)
+    .setDisabled(currentPage === 0);
+
+  const nextButton = new ButtonBuilder()
+    .setCustomId('help_next')
+    .setLabel('Next ➡️')
+    .setStyle(ButtonStyle.Primary)
+    .setDisabled(currentPage === totalPages - 1);
+
+  const closeButton = new ButtonBuilder()
+    .setCustomId('help_close')
+    .setLabel('❌ Close')
+    .setStyle(ButtonStyle.Danger);
+
+  return new ActionRowBuilder().addComponents(prevButton, nextButton, closeButton);
+}
+
 export default {
   data: new SlashCommandBuilder()
     .setName('embed_help')
@@ -122,18 +145,50 @@ export default {
 
   async execute(interaction) {
     const pages = buildPages(interaction);
-    const currentPage = 0;
-    const components = [
-      new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId(`embed_help_prev_${currentPage}`).setLabel('⬅️ Previous').setStyle(ButtonStyle.Secondary).setDisabled(true),
-        new ButtonBuilder().setCustomId(`embed_help_next_${currentPage}`).setLabel('Next ➡️').setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('embed_help_close').setLabel('❌ Close').setStyle(ButtonStyle.Danger)
-      )
-    ];
-    return interaction.reply({
+    let currentPage = 0;
+    const totalPages = pages.length;
+
+    const response = await interaction.reply({
       embeds: [pages[currentPage]],
-      components,
+      components: [buildButtonRow(currentPage, totalPages)],
       ephemeral: true,
+    });
+
+    // Create message component collector
+    const collector = response.createMessageComponentCollector({
+      time: 15 * 60 * 1000, // 15 minutes
+    });
+
+    collector.on('collect', async (buttonInteraction) => {
+      // Only allow the user who initiated the help command to interact
+      if (buttonInteraction.user.id !== interaction.user.id) {
+        return buttonInteraction.reply({
+          content: '❌ You can only use buttons on your own help message.',
+          ephemeral: true,
+        });
+      }
+
+      if (buttonInteraction.customId === 'help_prev') {
+        currentPage = Math.max(0, currentPage - 1);
+      } else if (buttonInteraction.customId === 'help_next') {
+        currentPage = Math.min(totalPages - 1, currentPage + 1);
+      } else if (buttonInteraction.customId === 'help_close') {
+        collector.stop();
+        return buttonInteraction.reply({
+          content: '❌ Help closed.',
+          ephemeral: true,
+        });
+      }
+
+      await buttonInteraction.update({
+        embeds: [pages[currentPage]],
+        components: [buildButtonRow(currentPage, totalPages)],
+      });
+    });
+
+    collector.on('end', () => {
+      // Optionally remove components when collector times out
+      response.edit({ components: [] }).catch(() => {});
     });
   },
 };

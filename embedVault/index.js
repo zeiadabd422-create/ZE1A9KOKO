@@ -240,6 +240,15 @@ export default function EmbedVaultModule(client) {
         ),
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
+            .setCustomId('embed_type')
+            .setLabel('Type (Required)')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(true)
+            .setPlaceholder('Welcome | Goodbye | Partner | Manual')
+            .setValue(isEdit ? (embedDoc?.type ?? 'Manual') : 'Manual')
+        ),
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
             .setCustomId('title')
             .setLabel('Title')
             .setStyle(TextInputStyle.Short)
@@ -571,9 +580,19 @@ export default function EmbedVaultModule(client) {
 
           // FIX #1 – read raw values; empty string = intentional clear, not a deletion
           const newName      = interaction.fields.getTextInputValue('embed_name').trim();
+          const newType      = interaction.fields.getTextInputValue('embed_type').trim().toLowerCase();
           const title        = interaction.fields.getTextInputValue('title');        // no .trim() to preserve intent
           const description  = interaction.fields.getTextInputValue('description');
           const color        = interaction.fields.getTextInputValue('color').trim();
+
+          // Validate type
+          const validTypes = ['welcome', 'goodbye', 'partner', 'manual'];
+          if (!validTypes.includes(newType)) {
+            return interaction.reply({
+              content: `❌ Invalid type: \`${newType}\`. Must be one of: Welcome, Goodbye, Partner, Manual`,
+              ephemeral: true,
+            });
+          }
 
           // Deep-copy: preserves nested objects (image, thumbnail, fields) correctly
           const updatedData = JSON.parse(JSON.stringify(vaultItem.data ?? {}));
@@ -597,7 +616,7 @@ export default function EmbedVaultModule(client) {
             interaction.guildId,
             finalName,
             updatedData,
-            vaultItem.type,
+            newType.charAt(0).toUpperCase() + newType.slice(1),
             {
               authorName:       vaultItem.authorName,
               authorIcon:       vaultItem.authorIcon,
@@ -610,7 +629,7 @@ export default function EmbedVaultModule(client) {
           const previewEmbed = createPreview(buildFullData(updated), { member: interaction.member });
 
           return interaction.reply({
-            content: `## ✏️ Editing: **${updated.name}**\n✅ Basic Info saved!`,
+            content: `## ✏️ Editing: **${updated.name}**\n✅ Basic Info saved! (Type: ${updated.type})`,
             embeds: [previewEmbed],
             components: [buildEditorRow(updated.name)],
             ephemeral: true,
@@ -620,11 +639,21 @@ export default function EmbedVaultModule(client) {
         // ── Basic Info (create) ───────────────────────────────────────────────
         if (customId === 'embedvault_basicinfo_submit_create') {
           const name        = interaction.fields.getTextInputValue('embed_name').trim();
+          const typeInput   = interaction.fields.getTextInputValue('embed_type').trim().toLowerCase();
           const title       = interaction.fields.getTextInputValue('title');
           const description = interaction.fields.getTextInputValue('description');
           const color       = interaction.fields.getTextInputValue('color').trim();
 
           if (!name) return interaction.reply({ content: '❌ Embed name is required.', ephemeral: true });
+
+          // Validate type
+          const validTypes = ['welcome', 'goodbye', 'partner', 'manual'];
+          if (!validTypes.includes(typeInput)) {
+            return interaction.reply({
+              content: `❌ Invalid type: \`${typeInput}\`. Must be one of: Welcome, Goodbye, Partner, Manual`,
+              ephemeral: true,
+            });
+          }
 
           const data = {};
           if (title)       data.title       = title;
@@ -639,11 +668,12 @@ export default function EmbedVaultModule(client) {
             });
           }
 
-          const created = await this.upsert(interaction.guildId, name, data, 'Manual');
+          const finalType = typeInput.charAt(0).toUpperCase() + typeInput.slice(1);
+          const created = await this.upsert(interaction.guildId, name, data, finalType);
           const previewEmbed = createPreview(buildFullData(created), { member: interaction.member });
 
           return interaction.reply({
-            content: `## ✏️ Editing: **${created.name}**\n✅ Created! Add Author/Footer and Images next.`,
+            content: `## ✏️ Editing: **${created.name}**\n✅ Created! (Type: ${created.type}) Add Author/Footer and Images next.`,
             embeds: [previewEmbed],
             components: [buildEditorRow(created.name)],
             ephemeral: true,
