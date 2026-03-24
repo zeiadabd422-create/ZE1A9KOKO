@@ -62,6 +62,7 @@ const GuildConfigSchema = new mongoose.Schema(
         default: '',
       },
     }],
+  },
   { timestamps: true }
 );
 

@@ -1,6 +1,6 @@
 import { buildPages } from '../commands/utility/embedHelp.js';
 import GuildConfig from '../modules/config/GuildConfig.js';
-import { ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle } from 'discord.js';
+import { ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ButtonBuilder, ButtonStyle } from 'discord.js';
 
 export default {
   name: 'interactionCreate',
