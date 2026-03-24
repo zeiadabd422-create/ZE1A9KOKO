@@ -48,7 +48,20 @@ const GuildConfigSchema = new mongoose.Schema(
         default: '',
       },
     },
-  },
+    partners: [{
+      embedName: {
+        type: String,
+        default: '',
+      },
+      roleId: {
+        type: String,
+        default: '',
+      },
+      inviteLink: {
+        type: String,
+        default: '',
+      },
+    }],
   { timestamps: true }
 );
 

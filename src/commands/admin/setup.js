@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, ChannelType } from 'discord.js';
+import { SlashCommandBuilder, ChannelType, ActionRowBuilder, StringSelectMenuBuilder } from 'discord.js';
 import GuildConfig from '../../modules/config/GuildConfig.js';
 
 export default {
@@ -15,13 +15,6 @@ export default {
             .setDescription('قناة الترحيب • Welcome channel')
             .setRequired(true)
             .addChannelTypes(ChannelType.GuildText)
-        )
-        .addStringOption(option =>
-          option
-            .setName('embed_name')
-            .setDescription('اسم الإيمبد • Embed name from vault')
-            .setRequired(true)
-            .setAutocomplete(true)
         )
         .addRoleOption(option =>
           option
@@ -41,13 +34,6 @@ export default {
             .setRequired(true)
             .addChannelTypes(ChannelType.GuildText)
         )
-        .addStringOption(option =>
-          option
-            .setName('embed_name')
-            .setDescription('اسم الإيمبد • Embed name from vault')
-            .setRequired(true)
-            .setAutocomplete(true)
-        )
     )
     .addSubcommand(subcommand =>
       subcommand
@@ -59,13 +45,6 @@ export default {
             .setDescription('قناة التعزيز • Boost event channel')
             .setRequired(true)
             .addChannelTypes(ChannelType.GuildText)
-        )
-        .addStringOption(option =>
-          option
-            .setName('embed_name')
-            .setDescription('اسم الإيمبد • Embed name from vault')
-            .setRequired(true)
-            .setAutocomplete(true)
         )
     )
     .addSubcommand(subcommand =>
@@ -79,35 +58,12 @@ export default {
             .setRequired(true)
             .addChannelTypes(ChannelType.GuildText)
         )
+    )
+    .addSubcommand(subcommand =>
+      subcommand
+        .setName('partner')
+        .setDescription('إعداد شراكة • Configure partner setup')
     ),
-
-  async autocomplete(interaction) {
-    const option = interaction.options.getFocused(true);
-    if (option.name === 'embed_name') {
-      try {
-        if (!interaction.client.embedVault) {
-          await interaction.respond([]);
-          return;
-        }
-
-        const embeds = await interaction.client.embedVault.list(interaction.guildId);
-        const focusedValue = interaction.options.getFocused();
-
-        const filtered = embeds
-          .filter(embed => embed.name.toLowerCase().includes(focusedValue.toLowerCase()))
-          .slice(0, 25)
-          .map(embed => ({
-            name: embed.name.length > 50 ? embed.name.substring(0, 47) + '...' : embed.name,
-            value: embed.name,
-          }));
-
-        await interaction.respond(filtered);
-      } catch (err) {
-        console.error('[setup autocomplete] Error:', err);
-        await interaction.respond([]).catch(() => {});
-      }
-    }
-  },
 
   async execute(interaction) {
     try {
@@ -119,95 +75,128 @@ export default {
 
       if (sub === 'welcome') {
         const channel = interaction.options.getChannel('channel');
-        const embedName = interaction.options.getString('embed_name');
         const autoRole = interaction.options.getRole('auto_role');
-
-        // Verify embed exists
-        if (!interaction.client.embedVault) {
-          return interaction.reply({ content: '❌ EmbedVault module is not loaded.', ephemeral: true });
-        }
-
-        const embed = await interaction.client.embedVault.getByName(interaction.guildId, embedName);
-        if (!embed) {
-          return interaction.reply({ content: `❌ Embed **${embedName}** not found in vault.`, ephemeral: true });
-        }
 
         const config = await GuildConfig.findOneAndUpdate(
           { guildId: interaction.guildId },
           {
             $set: {
               'welcome.channelId': channel.id,
-              'welcome.embedName': embedName,
               'welcome.autoRoleId': autoRole.id,
             },
           },
           { upsert: true, new: true }
         );
 
+        // Get embeds for select menu
+        if (!interaction.client.embedVault) {
+          return interaction.reply({ content: '❌ EmbedVault module is not loaded.', ephemeral: true });
+        }
+
+        const embeds = await interaction.client.embedVault.list(interaction.guildId);
+        if (embeds.length === 0) {
+          return interaction.reply({ content: '❌ No embeds found in vault. Create some embeds first.', ephemeral: true });
+        }
+
+        const options = embeds.map(embed => ({
+          label: embed.name.length > 100 ? embed.name.substring(0, 97) + '...' : embed.name,
+          value: embed.name,
+        }));
+
+        const selectMenu = new StringSelectMenuBuilder()
+          .setCustomId(`setup_embed_select:welcome`)
+          .setPlaceholder('Choose the welcome embed')
+          .addOptions(options);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
         return interaction.reply({
-          content: `✅ **Welcome Setup Complete!**\n📢 Channel: ${channel}\n🎯 Embed: **${embedName}**\n🔑 Auto-Role: ${autoRole}`,
+          content: `✅ **Welcome Setup Started!**\n📢 Channel: ${channel}\n🔑 Auto-Role: ${autoRole}\n\n🎯 **Select the embed to use for welcome messages:**`,
+          components: [row],
           ephemeral: true,
         });
       }
 
       if (sub === 'goodbye') {
         const channel = interaction.options.getChannel('channel');
-        const embedName = interaction.options.getString('embed_name');
-
-        // Verify embed exists
-        if (!interaction.client.embedVault) {
-          return interaction.reply({ content: '❌ EmbedVault module is not loaded.', ephemeral: true });
-        }
-
-        const embed = await interaction.client.embedVault.getByName(interaction.guildId, embedName);
-        if (!embed) {
-          return interaction.reply({ content: `❌ Embed **${embedName}** not found in vault.`, ephemeral: true });
-        }
 
         const config = await GuildConfig.findOneAndUpdate(
           { guildId: interaction.guildId },
           {
             $set: {
               'goodbye.channelId': channel.id,
-              'goodbye.embedName': embedName,
             },
           },
           { upsert: true, new: true }
         );
 
+        // Get embeds for select menu
+        if (!interaction.client.embedVault) {
+          return interaction.reply({ content: '❌ EmbedVault module is not loaded.', ephemeral: true });
+        }
+
+        const embeds = await interaction.client.embedVault.list(interaction.guildId);
+        if (embeds.length === 0) {
+          return interaction.reply({ content: '❌ No embeds found in vault. Create some embeds first.', ephemeral: true });
+        }
+
+        const options = embeds.map(embed => ({
+          label: embed.name.length > 100 ? embed.name.substring(0, 97) + '...' : embed.name,
+          value: embed.name,
+        }));
+
+        const selectMenu = new StringSelectMenuBuilder()
+          .setCustomId(`setup_embed_select:goodbye`)
+          .setPlaceholder('Choose the goodbye embed')
+          .addOptions(options);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
         return interaction.reply({
-          content: `✅ **Goodbye Setup Complete!**\n📢 Channel: ${channel}\n🎯 Embed: **${embedName}**`,
+          content: `✅ **Goodbye Setup Started!**\n📢 Channel: ${channel}\n\n🎯 **Select the embed to use for goodbye messages:**`,
+          components: [row],
           ephemeral: true,
         });
       }
 
       if (sub === 'boost') {
         const channel = interaction.options.getChannel('channel');
-        const embedName = interaction.options.getString('embed_name');
-
-        // Verify embed exists
-        if (!interaction.client.embedVault) {
-          return interaction.reply({ content: '❌ EmbedVault module is not loaded.', ephemeral: true });
-        }
-
-        const embed = await interaction.client.embedVault.getByName(interaction.guildId, embedName);
-        if (!embed) {
-          return interaction.reply({ content: `❌ Embed **${embedName}** not found in vault.`, ephemeral: true });
-        }
 
         const config = await GuildConfig.findOneAndUpdate(
           { guildId: interaction.guildId },
           {
             $set: {
               'boost.channelId': channel.id,
-              'boost.embedName': embedName,
             },
           },
           { upsert: true, new: true }
         );
 
+        // Get embeds for select menu
+        if (!interaction.client.embedVault) {
+          return interaction.reply({ content: '❌ EmbedVault module is not loaded.', ephemeral: true });
+        }
+
+        const embeds = await interaction.client.embedVault.list(interaction.guildId);
+        if (embeds.length === 0) {
+          return interaction.reply({ content: '❌ No embeds found in vault. Create some embeds first.', ephemeral: true });
+        }
+
+        const options = embeds.map(embed => ({
+          label: embed.name.length > 100 ? embed.name.substring(0, 97) + '...' : embed.name,
+          value: embed.name,
+        }));
+
+        const selectMenu = new StringSelectMenuBuilder()
+          .setCustomId(`setup_embed_select:boost`)
+          .setPlaceholder('Choose the boost embed')
+          .addOptions(options);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
         return interaction.reply({
-          content: `✅ **Boost Setup Complete!**\n📢 Channel: ${channel}\n🎯 Embed: **${embedName}**`,
+          content: `✅ **Boost Setup Started!**\n📢 Channel: ${channel}\n\n🎯 **Select the embed to use for boost messages:**`,
+          components: [row],
           ephemeral: true,
         });
       }
@@ -231,7 +220,35 @@ export default {
         });
       }
 
-      return interaction.reply({ content: 'Unknown subcommand.', ephemeral: true });
+      if (sub === 'partner') {
+        // Get embeds for select menu
+        if (!interaction.client.embedVault) {
+          return interaction.reply({ content: '❌ EmbedVault module is not loaded.', ephemeral: true });
+        }
+
+        const embeds = await interaction.client.embedVault.list(interaction.guildId);
+        if (embeds.length === 0) {
+          return interaction.reply({ content: '❌ No embeds found in vault. Create some embeds first.', ephemeral: true });
+        }
+
+        const options = embeds.map(embed => ({
+          label: embed.name.length > 100 ? embed.name.substring(0, 97) + '...' : embed.name,
+          value: embed.name,
+        }));
+
+        const selectMenu = new StringSelectMenuBuilder()
+          .setCustomId(`setup_partner_embed_select`)
+          .setPlaceholder('Choose the partner embed')
+          .addOptions(options);
+
+        const row = new ActionRowBuilder().addComponents(selectMenu);
+
+        return interaction.reply({
+          content: `🎯 **Partner Setup Started!**\n\n**Step 1:** Select the embed to use for partner messages:`,
+          components: [row],
+          ephemeral: true,
+        });
+      }
     } catch (err) {
       console.error('[setup command] Error:', err);
       try {

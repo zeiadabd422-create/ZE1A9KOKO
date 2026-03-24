@@ -116,13 +116,28 @@ export class EmbedHelper {
       const { guild } = member;
       if (!guild) return false;
 
-      // First check for partner embed via invite code
+      // First check GuildConfig for assigned embedName
+      const config = await GuildConfig.findOne({ guildId: guild.id });
+      const embedName = config?.welcome?.embedName;
       let embed = null;
-      if (usedInviteCode) {
+      if (embedName) {
+        embed = await this.getEmbedByName(guild.id, embedName);
+      }
+
+      // Check partners array for matching invite
+      if (!embed && usedInviteCode && config?.partners) {
+        const partner = config.partners.find(p => p.inviteLink.includes(usedInviteCode));
+        if (partner) {
+          embed = await this.getEmbedByName(guild.id, partner.embedName);
+        }
+      }
+
+      // Fall back to partner embed via invite code (legacy)
+      if (!embed && usedInviteCode) {
         embed = await this.getEmbedByInvite(guild.id, usedInviteCode);
       }
 
-      // Fall back to generic Welcome embed
+      // Fall back to generic Welcome embed by type
       if (!embed) {
         embed = await this.getEmbedByType(guild.id, EMBED_TYPES.WELCOME);
       }
@@ -132,7 +147,6 @@ export class EmbedHelper {
       // Determine target channel
       let targetChannel = channel;
       if (!targetChannel) {
-        const config = await GuildConfig.findOne({ guildId: guild.id });
         const channelId = config?.welcome?.channelId;
         targetChannel = channelId ? guild.channels.cache.get(channelId) : null;
       }
@@ -166,22 +180,33 @@ export class EmbedHelper {
 
       await this.sendEmbed(targetChannel, embed.data, context, `Welcome: ${member.user.tag}`);
 
-      // Assign partner role if linked from embed
-      if (embed.linkedPartnerRole && usedInviteCode) {
-        try {
-          const role = guild.roles.cache.get(embed.linkedPartnerRole);
-          if (role && !member.roles.cache.has(role.id)) {
-            await member.roles.add(role.id);
-            console.log(`[EmbedHelper] Assigned partner role to ${member.user.tag}`);
+      // Assign partner role from partners array or legacy linked role
+      if (usedInviteCode) {
+        let partnerRoleId = null;
+        if (config?.partners) {
+          const partner = config.partners.find(p => p.inviteLink.includes(usedInviteCode));
+          if (partner) {
+            partnerRoleId = partner.roleId;
           }
-        } catch (roleErr) {
-          console.error('[EmbedHelper] Failed to assign partner role:', roleErr);
+        }
+        if (!partnerRoleId && embed?.linkedPartnerRole) {
+          partnerRoleId = embed.linkedPartnerRole;
+        }
+        if (partnerRoleId) {
+          try {
+            const role = guild.roles.cache.get(partnerRoleId);
+            if (role && !member.roles.cache.has(role.id)) {
+              await member.roles.add(role.id);
+              console.log(`[EmbedHelper] Assigned partner role to ${member.user.tag}`);
+            }
+          } catch (roleErr) {
+            console.error('[EmbedHelper] Failed to assign partner role:', roleErr);
+          }
         }
       }
 
       // Assign automatic role from GuildConfig welcome.autoRoleId
       try {
-        const config = await GuildConfig.findOne({ guildId: guild.id });
         const autoRoleId = config?.welcome?.autoRoleId;
         if (autoRoleId) {
           const role = guild.roles.cache.get(autoRoleId);
@@ -212,13 +237,24 @@ export class EmbedHelper {
       const { guild } = member;
       if (!guild) return false;
 
-      const embed = await this.getEmbedByType(guild.id, EMBED_TYPES.GOODBYE);
+      // Check GuildConfig for assigned embedName
+      const config = await GuildConfig.findOne({ guildId: guild.id });
+      const embedName = config?.goodbye?.embedName;
+      let embed = null;
+      if (embedName) {
+        embed = await this.getEmbedByName(guild.id, embedName);
+      }
+
+      // Fall back to generic Goodbye embed by type
+      if (!embed) {
+        embed = await this.getEmbedByType(guild.id, EMBED_TYPES.GOODBYE);
+      }
+
       if (!embed?.data) return false;
 
       // Determine target channel
       let targetChannel = channel;
       if (!targetChannel) {
-        const config = await GuildConfig.findOne({ guildId: guild.id });
         const channelId = config?.goodbye?.channelId;
         targetChannel = channelId ? guild.channels.cache.get(channelId) : null;
       }
@@ -254,13 +290,24 @@ export class EmbedHelper {
     try {
       if (!guild) return false;
 
-      const embed = await this.getEmbedByType(guild.id, EMBED_TYPES.BOOST);
+      // Check GuildConfig for assigned embedName
+      const config = await GuildConfig.findOne({ guildId: guild.id });
+      const embedName = config?.boost?.embedName;
+      let embed = null;
+      if (embedName) {
+        embed = await this.getEmbedByName(guild.id, embedName);
+      }
+
+      // Fall back to generic Boost embed by type
+      if (!embed) {
+        embed = await this.getEmbedByType(guild.id, EMBED_TYPES.BOOST);
+      }
+
       if (!embed?.data) return false;
 
       // Determine target channel
       let targetChannel = channel;
       if (!targetChannel) {
-        const config = await GuildConfig.findOne({ guildId: guild.id });
         const channelId = config?.boost?.channelId;
         targetChannel = channelId ? guild.channels.cache.get(channelId) : null;
       }
