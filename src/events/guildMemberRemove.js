@@ -4,13 +4,13 @@ export default {
     try {
       const { client } = member;
 
-      // Forward member removal to welcome handler if present
-      if (client && client.welcome && typeof client.welcome.handleMemberRemove === 'function') {
+      // Delegate to unified EmbedHelper goodbye path
+      if (client && client.embedHelper && typeof client.embedHelper.sendGoodbyeEmbed === 'function') {
         try {
           console.log(`[GuildMemberRemove] Member left: ${member.user.tag}`);
-          await client.welcome.handleMemberRemove(member);
+          await client.embedHelper.sendGoodbyeEmbed(member);
         } catch (err) {
-          console.error('[Welcome] Member remove handler error:', err);
+          console.error('[EmbedHelper] sendGoodbyeEmbed error:', err);
         }
         return;
       }

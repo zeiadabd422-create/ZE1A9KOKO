@@ -1,4 +1,4 @@
-import WelcomeConfig from './schema.js';
+import GuildConfig from '../config/GuildConfig.js';
 import { render } from '../../core/embedEngine.js';
 
 export default function WelcomeModule(client) {
@@ -34,106 +34,31 @@ export default function WelcomeModule(client) {
 
     async handleMemberAdd(member, usedInviteCode = null) {
       try {
-        let config = await WelcomeConfig.findOne({ guildId: member.guild.id });
-        if (!config) {
-          config = await WelcomeConfig.findOneAndUpdate(
-            { guildId: member.guild.id },
-            { guildId: member.guild.id, enabled: true },
-            { upsert: true, new: true }
-          );
-        }
-        if (!config?.enabled) return;
-
-        // Partner logic: check EmbedVault first
-        let sentViaVault = false;
-        if (member.client && member.client.embedVault) {
-          try {
-            const clientVault = member.client.embedVault;
-            let vaultItem = null;
-            let totalInviteUses = 0;
-            
-            if (usedInviteCode) {
-              vaultItem = await clientVault.getByLinkedInvite(member.guild.id, usedInviteCode);
-              
-              // Get total uses count for this invite code
-              try {
-                const inviteObj = await member.guild.invites.fetch(usedInviteCode);
-                totalInviteUses = inviteObj?.uses ?? 0;
-              } catch (invErr) {
-                console.warn('[WelcomeModule] Could not fetch invite uses:', invErr.message);
-              }
-            }
-
-            if (!vaultItem) {
-              vaultItem = await clientVault.getByType(member.guild.id, 'Welcome');
-            }
-
-            if (vaultItem && vaultItem.data) {
-              const channelId = config.welcomeEmbed?.channel;
-              const channel = channelId ? member.guild.channels.cache.get(channelId) : null;
-
-              if (channel?.isTextBased()) {
-                // Pass invite context with code and uses for embedEngine parsing
-                const context = {
-                  member,
-                  'invite.code': usedInviteCode || '',
-                  'invite.uses': totalInviteUses,
-                  'partner.name': vaultItem.name || '',
-                  'member': member.user.username,
-                  'member.name': member.user.username,
-                  'member.id': member.id,
-                  'member.mention': `<@${member.id}>`,
-                  'server': member.guild.name,
-                  'server.name': member.guild.name,
-                  'server.id': member.guild.id,
-                };
-                
-                const rendered = render(vaultItem.data, context);
-                await channel.send({ embeds: [rendered] });
-                sentViaVault = true;
-
-                // Assign partner role if this embed has one linked
-                if (vaultItem.linkedPartnerRole) {
-                  try {
-                    const role = member.guild.roles.cache.get(vaultItem.linkedPartnerRole);
-                    if (role && !member.roles.cache.has(role.id)) {
-                      await member.roles.add(role.id);
-                      console.log(`[WelcomeModule] Assigned partner role to ${member.user.tag}`);
-                    }
-                  } catch (roleErr) {
-                    console.error('[WelcomeModule] Failed to assign partner role:', roleErr);
-                  }
-                }
-              }
-            }
-          } catch (vaultErr) {
-            console.error('[WelcomeModule] EmbedVault send failed:', vaultErr);
-          }
-        }
-
-        if (sentViaVault) {
-          // keep existing autoRole path but skip duplicate welcome message when vault handled welcome embeds
-          if (config.autoRole) {
-            try {
-              const role = member.guild.roles.cache.get(config.autoRole);
-              if (role && !member.roles.cache.has(role.id)) await member.roles.add(role.id);
-            } catch (roleErr) {}
-          }
+        if (client && client.embedHelper && typeof client.embedHelper.sendWelcomeEmbed === 'function') {
+          await client.embedHelper.sendWelcomeEmbed(member, usedInviteCode);
           return;
         }
 
-        if (config.autoRole) {
-          try {
-            const role = member.guild.roles.cache.get(config.autoRole);
-            if (role && !member.roles.cache.has(role.id)) await member.roles.add(role.id);
-          } catch (roleErr) {}
-        }
+        // Legacy fallback for manual component-based welcome flows (non-vault)
+        const config = await GuildConfig.findOne({ guildId: member.guild.id });
+        if (!config?.welcome?.channelId) return;
 
-        if (config.welcomeEmbed?.channel) {
-          const channel = member.guild.channels.cache.get(config.welcomeEmbed.channel);
-          if (channel?.isTextBased()) {
-            const embed = await this.buildEmbed(config.welcomeEmbed, member, member.guild);
-            if (embed) await channel.send({ embeds: [embed] });
+        const channel = member.guild.channels.cache.get(config.welcome.channelId);
+        if (!channel?.isTextBased()) return;
+
+        const embed = await this.buildEmbed({
+          title: config.welcome.embedName || 'Welcome',
+          description: `Welcome to ${member.guild.name}, ${member.user.username}!`,
+          color: '#00FF00',
+        }, member, member.guild);
+        if (embed) await channel.send({ embeds: [embed] });
+
+        // Unified autoRole using GuildConfig in all cases
+        const autoRoleId = config?.welcome?.autoRoleId;
+        if (autoRoleId) {
+          const role = member.guild.roles.cache.get(autoRoleId);
+          if (role && !member.roles.cache.has(role.id)) {
+            await member.roles.add(role.id).catch(err => console.error('[WelcomeModule] Auto role assignment failed:', err));
           }
         }
       } catch (err) {
@@ -143,94 +68,83 @@ export default function WelcomeModule(client) {
 
     async handleMemberRemove(member) {
       try {
-        const config = await WelcomeConfig.findOne({ guildId: member.guild.id });
-        if (!config?.enabled) return;
-
-        // Check EmbedVault first for Goodbye/Leave embeds
-        if (member.client && member.client.embedVault) {
-          try {
-            const clientVault = member.client.embedVault;
-            const vaultItem = await clientVault.getByType(member.guild.id, 'Goodbye');
-
-            if (vaultItem && vaultItem.data) {
-              const channelId = config.goodbyeEmbed?.channel;
-              const channel = channelId ? member.guild.channels.cache.get(channelId) : null;
-
-              if (channel?.isTextBased()) {
-                // Build context with member and server details for placeholder replacement
-                const context = {
-                  member,
-                  'member': member.user.username,
-                  'server': member.guild.name,
-                  'member.name': member.user.username,
-                  'member.id': member.id,
-                  'member.mention': `<@${member.id}>`,
-                  'server.name': member.guild.name,
-                  'server.id': member.guild.id,
-                };
-
-                const rendered = render(vaultItem.data, context);
-                await channel.send({ embeds: [rendered] });
-                console.log(`[WelcomeModule] Sent goodbye embed for ${member.user.tag}`);
-                return; // Stop here if vault embed was sent successfully
-              }
-            }
-          } catch (vaultErr) {
-            console.error('[WelcomeModule] EmbedVault goodbye send failed:', vaultErr);
-          }
+        if (client && client.embedHelper && typeof client.embedHelper.sendGoodbyeEmbed === 'function') {
+          await client.embedHelper.sendGoodbyeEmbed(member);
+          return;
         }
 
-        // Fallback to legacy method if vault not configured
-        if (config.goodbyeEmbed?.channel) {
-          const channel = member.guild.channels.cache.get(config.goodbyeEmbed.channel);
-          if (channel?.isTextBased()) {
-            const embed = await this.buildEmbed(config.goodbyeEmbed, member, member.guild);
-            if (embed) await channel.send({ embeds: [embed] });
-          }
-        }
+        const config = await GuildConfig.findOne({ guildId: member.guild.id });
+        if (!config?.goodbye?.channelId) return;
+
+        const channel = member.guild.channels.cache.get(config.goodbye.channelId);
+        if (!channel?.isTextBased()) return;
+
+        const embed = await this.buildEmbed({
+          title: config.goodbye.embedName || 'Goodbye',
+          description: `${member.user.username} has left ${member.guild.name}.`,
+          color: '#FF0000',
+        }, member, member.guild);
+        if (embed) await channel.send({ embeds: [embed] });
       } catch (err) {
         console.error('[WelcomeModule.handleMemberRemove]', err);
       }
-    }
+    },
 
     async handleButtonInteraction(interaction) {
       try {
-        const parts = interaction.customId.split('_');
-        // format: welcome_{embedType}_{section}
-        const embedType = parts[1];
-        const section = parts[2];
-        const cfg = await WelcomeConfig.findOne({ guildId: interaction.guildId });
-        if (!cfg) {
-          return interaction.reply({ content: 'Configuration not found.', ephemeral: true });
-        }
-        const embedConfig = embedType === 'welcome' ? cfg.welcomeEmbed || {} : cfg.goodbyeEmbed || {};
+        return interaction.reply({
+          content: '⚠️ Deprecated welcome configuration path. Use the new Embed Helper flow via `/setup` and EmbedVault embeds.',
+          ephemeral: true,
+        });
+      } catch (err) {
+        console.error('[WelcomeModule.handleButtonInteraction]', err);
+      }
+    },
 
-        const {
-          ModalBuilder,
-          TextInputBuilder,
-          TextInputStyle,
-          ActionRowBuilder,
-        } = await import('discord.js');
+    async handleModalSubmit(interaction) {
+      try {
+        return interaction.reply({
+          content: '⚠️ Deprecated welcome modal submission path. Please use the new unified configuration.',
+          ephemeral: true,
+        });
+      } catch (err) {
+        console.error('[WelcomeModule.handleModalSubmit]', err);
+      }
+    },
 
-        const modal = new ModalBuilder()
-          .setCustomId(`welcome_modal_${embedType}_${section}`)
-          .setTitle(`Edit ${embedType === 'welcome' ? 'Welcome' : 'Goodbye'} ${section}`);
+    async setup(guildId, channelId, autoRoleId) {
+      try {
+        const cfg = await GuildConfig.findOneAndUpdate(
+          { guildId },
+          {
+            guildId,
+            'welcome.channelId': channelId,
+            'welcome.autoRoleId': autoRoleId,
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+        return { success: true, config: cfg };
+      } catch (err) {
+        console.error('[WelcomeModule.setup] Error:', err);
+        return { success: false, error: err.message || 'Setup failed' };
+      }
+    },
 
-        if (section === 'basicinfo') {
-          const titleInput = new TextInputBuilder()
-            .setCustomId('title')
-            .setLabel('Title')
-            .setStyle(TextInputStyle.Short)
-            .setRequired(false)
-            .setValue(embedConfig.title || '');
-          const descInput = new TextInputBuilder()
-            .setCustomId('description')
-            .setLabel('Description')
-            .setStyle(TextInputStyle.Paragraph)
-            .setRequired(false)
-            .setValue(embedConfig.description || '');
-          const colorInput = new TextInputBuilder()
-            .setCustomId('color')
+    async setupGoodbye(guildId, channelId) {
+      try {
+        const cfg = await GuildConfig.findOneAndUpdate(
+          { guildId },
+          { 'goodbye.channelId': channelId },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+        return { success: true, config: cfg };
+      } catch (err) {
+        console.error('[WelcomeModule.setupGoodbye] Error:', err);
+        return { success: false, error: err.message || 'Setup failed' };
+      }
+    },
+  };
+}
             .setLabel('Color (hex)')
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
@@ -303,34 +217,10 @@ export default function WelcomeModule(client) {
 
     async handleModalSubmit(interaction) {
       try {
-        const parts = interaction.customId.split('_');
-        const embedType = parts[2];
-        const section = parts[3];
-        const cfg = await WelcomeConfig.findOne({ guildId: interaction.guildId });
-        if (!cfg) return;
-        const key = embedType === 'welcome' ? 'welcomeEmbed' : 'goodbyeEmbed';
-        const embedConfig = cfg[key] || {};
-
-        const fields = interaction.fields;
-        if (section === 'basicinfo') {
-          embedConfig.title = fields.getTextInputValue('title');
-          embedConfig.description = fields.getTextInputValue('description');
-          embedConfig.color = fields.getTextInputValue('color');
-          embedConfig.thumbnail_url = fields.getTextInputValue('thumbnail_url');
-        } else if (section === 'author') {
-          embedConfig.author_name = fields.getTextInputValue('author_name');
-          embedConfig.author_icon = fields.getTextInputValue('author_icon');
-        } else if (section === 'footer') {
-          embedConfig.footer_text = fields.getTextInputValue('footer_text');
-          embedConfig.footer_image_url = fields.getTextInputValue('footer_image_url');
-        } else if (section === 'images') {
-          embedConfig.image_url = fields.getTextInputValue('image_url');
-        }
-
-        cfg[key] = embedConfig;
-        cfg.markModified(key);
-        await cfg.save();
-        await interaction.reply({ content: '✅ Updated.', ephemeral: true });
+        return interaction.reply({
+          content: '⚠️ Deprecated welcome modal submission path. Please configure via new unified channels in guild config.',
+          ephemeral: true,
+        });
       } catch (err) {
         console.error('[WelcomeModule.handleModalSubmit]', err);
       }
@@ -338,16 +228,14 @@ export default function WelcomeModule(client) {
 
     async setup(guildId, channelId, autoRoleId) {
       try {
-        const cfg = await WelcomeConfig.findOneAndUpdate(
+        const cfg = await GuildConfig.findOneAndUpdate(
           { guildId },
           {
             guildId,
-            enabled: true,
-            welcomeChannel: channelId,
-            autoRole: autoRoleId,
-            'welcomeEmbed.channel': channelId,
+            'welcome.channelId': channelId,
+            'welcome.autoRoleId': autoRoleId,
           },
-          { upsert: true, new: true }
+          { upsert: true, new: true, setDefaultsOnInsert: true }
         );
         return { success: true, config: cfg };
       } catch (err) {
@@ -358,10 +246,13 @@ export default function WelcomeModule(client) {
 
     async setupGoodbye(guildId, channelId) {
       try {
-        const cfg = await WelcomeConfig.findOneAndUpdate(
+        const cfg = await GuildConfig.findOneAndUpdate(
           { guildId },
-          { guildId, enabled: true, 'goodbyeEmbed.channel': channelId },
-          { upsert: true, new: true }
+          {
+            guildId,
+            'goodbye.channelId': channelId,
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
         );
         return { success: true, config: cfg };
       } catch (err) {

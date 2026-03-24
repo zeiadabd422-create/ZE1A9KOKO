@@ -21,20 +21,18 @@ export default {
         });
       }
 
-      // Forward member join to welcome handler if present
-      if (client && client.welcome && typeof client.welcome.handleMemberAdd === 'function') {
+      // Delegate to unified EmbedHelper welcome path
+      if (client && client.embedHelper && typeof client.embedHelper.sendWelcomeEmbed === 'function') {
         try {
           console.log(`[GuildMemberAdd] New member: ${member.user.tag} (invite: ${usedInviteCode || 'unknown'})`);
-          await client.welcome.handleMemberAdd(member, usedInviteCode);
+          await client.embedHelper.sendWelcomeEmbed(member, usedInviteCode);
         } catch (err) {
-          console.error('[Welcome] Member add handler error:', err);
+          console.error('[EmbedHelper] sendWelcomeEmbed error:', err);
         }
         return;
       }
 
-      // As a safety net, if a guild still uses the legacy gateway join method
-      // we check the database rather than expecting a `modules.gateway`
-      // property.
+      // Fallback for legacy gateway join path
       try {
         const cfg = await GatewayConfig.findOne({ guildId: member.guild.id });
         if (cfg && cfg.methods?.join?.enabled && client.gateway && typeof client.gateway.handleMemberAdd === 'function') {

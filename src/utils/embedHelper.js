@@ -166,7 +166,7 @@ export class EmbedHelper {
 
       await this.sendEmbed(targetChannel, embed.data, context, `Welcome: ${member.user.tag}`);
 
-      // Assign partner role if linked
+      // Assign partner role if linked from embed
       if (embed.linkedPartnerRole && usedInviteCode) {
         try {
           const role = guild.roles.cache.get(embed.linkedPartnerRole);
@@ -177,6 +177,21 @@ export class EmbedHelper {
         } catch (roleErr) {
           console.error('[EmbedHelper] Failed to assign partner role:', roleErr);
         }
+      }
+
+      // Assign automatic role from GuildConfig welcome.autoRoleId
+      try {
+        const config = await GuildConfig.findOne({ guildId: guild.id });
+        const autoRoleId = config?.welcome?.autoRoleId;
+        if (autoRoleId) {
+          const role = guild.roles.cache.get(autoRoleId);
+          if (role && !member.roles.cache.has(role.id)) {
+            await member.roles.add(role.id);
+            console.log(`[EmbedHelper] Assigned autoRole to ${member.user.tag} (${autoRoleId})`);
+          }
+        }
+      } catch (roleErr) {
+        console.error('[EmbedHelper] Failed to assign autoRole:', roleErr);
       }
 
       return true;
