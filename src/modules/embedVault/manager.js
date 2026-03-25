@@ -66,34 +66,49 @@ export default function EmbedManagerModule() {
         const dashboardEmbed = new EmbedBuilder()
           .setColor(0xDAA520) // Professional gold color
           .setTitle('📦 لوحة تحكم الخزنة الإمبراطورية')
-          .setDescription(`**${embeds.length}** إمبد في الخزنة\n**الصفحة ${page + 1}/${totalPages}** — استخدم القائمة أدناه`)
+          .setDescription(`**${embeds.length}** إمبد في الخزنة\n**الصفحة ${page + 1}/${totalPages}** — استخدم القوائم أدناه`)
           .setFooter({ text: '⚙️ نظام إدارة الإمبد المتقدم • Advanced Embed Management System' });
 
-        // Navigation and utility buttons (compliant with Discord limits)
-        const utilityRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`embedvault_manager_prev:${page}`)
-            .setLabel('⬅️ السابق')
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(page === 0),
-          new ButtonBuilder()
-            .setCustomId('embedvault_create')
-            .setLabel('➕ إنشاء جديد')
-            .setStyle(ButtonStyle.Success),
-          new ButtonBuilder()
-            .setCustomId('embedvault_import')
-            .setLabel('📥 استيراد JSON')
-            .setStyle(ButtonStyle.Primary),
-          new ButtonBuilder()
-            .setCustomId(`embedvault_manager_next:${page}`)
-            .setLabel('التالي ➡️')
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(page >= totalPages - 1)
-        );
+        // Action select menu
+        const actionOptions = [
+          {
+            label: '➕ إنشاء إمبد جديد',
+            value: 'action_create',
+            description: 'Create a new embed from scratch',
+          },
+          {
+            label: '📥 استيراد JSON',
+            value: 'action_import',
+            description: 'Import embed from JSON data',
+          },
+        ];
+
+        if (page > 0) {
+          actionOptions.push({
+            label: '⬅️ الصفحة السابقة',
+            value: `action_prev:${page}`,
+            description: 'Go to previous page',
+          });
+        }
+
+        if (page < totalPages - 1) {
+          actionOptions.push({
+            label: 'الصفحة التالية ➡️',
+            value: `action_next:${page}`,
+            description: 'Go to next page',
+          });
+        }
+
+        const actionMenu = new StringSelectMenuBuilder()
+          .setCustomId('embedvault_action')
+          .setPlaceholder('اختر الإجراء....')
+          .addOptions(actionOptions);
+
+        const actionRow = new ActionRowBuilder().addComponents(actionMenu);
 
         return interaction.reply({
           embeds: [dashboardEmbed],
-          components: [menuRow, utilityRow],
+          components: [actionRow, menuRow],
           ephemeral: true,
         });
       } catch (err) {
@@ -155,10 +170,16 @@ export default function EmbedManagerModule() {
             content: '📦 خزنة الإمبد فارغة\nأنشئ إمبدك الأول للبدء!',
             components: [
               new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                  .setCustomId('embedvault_create')
-                  .setLabel('➕ إنشاء أول إمبد')
-                  .setStyle(ButtonStyle.Primary)
+                new StringSelectMenuBuilder()
+                  .setCustomId('embedvault_action')
+                  .setPlaceholder('اختر الإجراء....')
+                  .addOptions([
+                    {
+                      label: '➕ إنشاء أول إمبد',
+                      value: 'action_create',
+                      description: 'Create your first embed',
+                    },
+                  ])
               ),
             ],
           });
@@ -189,35 +210,50 @@ export default function EmbedManagerModule() {
         const dashboardEmbed = new EmbedBuilder()
           .setColor(0xDAA520) // Professional gold color (#DAA520)
           .setTitle('📦 لوحة تحكم الخزنة الإمبراطورية')
-          .setDescription(`**${embeds.length}** إمبد في الخزنة\n**الصفحة ${page + 1}/${totalPages}** — استخدم القائمة أدناه`)
+          .setDescription(`**${embeds.length}** إمبد في الخزنة\n**الصفحة ${page + 1}/${totalPages}** — استخدم القوائم أدناه`)
           .setThumbnail('https://cdn.discordapp.com/emojis/1234567890123456789.png') // Alya logo/placeholder
           .setFooter({ text: '⚙️ نظام إدارة الإمبد المتقدم • Advanced Embed Management System' });
 
-        // Navigation and utility buttons (compliant with Discord 5-per-row limit)
-        const utilityRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`embedvault_manager_prev:${page}`)
-            .setLabel('⬅️ السابق')
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(page === 0),
-          new ButtonBuilder()
-            .setCustomId('embedvault_create')
-            .setLabel('➕ إنشاء جديد')
-            .setStyle(ButtonStyle.Success),
-          new ButtonBuilder()
-            .setCustomId('embedvault_import')
-            .setLabel('📥 استيراد JSON')
-            .setStyle(ButtonStyle.Primary),
-          new ButtonBuilder()
-            .setCustomId(`embedvault_manager_next:${page}`)
-            .setLabel('التالي ➡️')
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(page >= totalPages - 1)
-        );
+        // Action select menu
+        const actionOptions = [
+          {
+            label: '➕ إنشاء إمبد جديد',
+            value: 'action_create',
+            description: 'Create a new embed from scratch',
+          },
+          {
+            label: '📥 استيراد JSON',
+            value: 'action_import',
+            description: 'Import embed from JSON data',
+          },
+        ];
+
+        if (page > 0) {
+          actionOptions.push({
+            label: '⬅️ الصفحة السابقة',
+            value: `action_prev:${page}`,
+            description: 'Go to previous page',
+          });
+        }
+
+        if (page < totalPages - 1) {
+          actionOptions.push({
+            label: 'الصفحة التالية ➡️',
+            value: `action_next:${page}`,
+            description: 'Go to next page',
+          });
+        }
+
+        const actionMenu = new StringSelectMenuBuilder()
+          .setCustomId('embedvault_action')
+          .setPlaceholder('اختر الإجراء....')
+          .addOptions(actionOptions);
+
+        const actionRow = new ActionRowBuilder().addComponents(actionMenu);
 
         return await interaction.editReply({
           embeds: [dashboardEmbed],
-          components: [menuRow, utilityRow],
+          components: [actionRow, menuRow],
         });
       } catch (err) {
         console.error('[EmbedManager.updateManager] Error:', err);

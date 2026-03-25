@@ -122,27 +122,35 @@ export class EmbedHelper {
       let embed = null;
       if (embedName) {
         embed = await this.getEmbedByName(guild.id, embedName);
+        console.log(`[EmbedHelper] Welcome: config embed "${embedName}" found: ${!!embed}`);
       }
 
       // Check partners array for matching invite
       if (!embed && usedInviteCode && config?.partners) {
         const partner = config.partners.find(p => p.inviteLink.includes(usedInviteCode));
         if (partner) {
+          console.log(`[EmbedHelper] Welcome: partner found for invite "${usedInviteCode}": ${partner.embedName}`);
           embed = await this.getEmbedByName(guild.id, partner.embedName);
+          console.log(`[EmbedHelper] Welcome: partner embed found: ${!!embed}`);
         }
       }
 
       // Fall back to partner embed via invite code (legacy)
       if (!embed && usedInviteCode) {
         embed = await this.getEmbedByInvite(guild.id, usedInviteCode);
+        console.log(`[EmbedHelper] Welcome: legacy invite embed for "${usedInviteCode}" found: ${!!embed}`);
       }
 
       // Fall back to generic Welcome embed by type
       if (!embed) {
         embed = await this.getEmbedByType(guild.id, EMBED_TYPES.WELCOME);
+        console.log(`[EmbedHelper] Welcome: generic welcome embed found: ${!!embed}`);
       }
 
-      if (!embed?.data) return false;
+      if (!embed?.data) {
+        console.log(`[EmbedHelper] Welcome: no embed data found, skipping send`);
+        return false;
+      }
 
       // Determine target channel
       let targetChannel = channel;
@@ -151,7 +159,12 @@ export class EmbedHelper {
         targetChannel = channelId ? guild.channels.cache.get(channelId) : null;
       }
 
-      if (!targetChannel?.isTextBased()) return false;
+      if (!targetChannel?.isTextBased()) {
+        console.log(`[EmbedHelper] Welcome: no valid channel found, skipping send`);
+        return false;
+      }
+
+      console.log(`[EmbedHelper] Welcome: sending embed "${embed.name}" to channel ${targetChannel.name}`);
 
       // Build context with all relevant info
       let inviteUses = 0;
@@ -263,16 +276,18 @@ export class EmbedHelper {
 
       const context = {
         member,
-        'member': member.user.username,
-        'member.name': member.user.username,
+        'member': member.user?.username || 'Unknown',
+        'member.name': member.user?.username || 'Unknown',
         'member.id': member.id,
+        'member.tag': member.user?.tag || 'عضو غادرنا',
+        'member.avatar': member.user?.displayAvatarURL() || 'Imperial Logo',
         'member.mention': `<@${member.id}>`,
         'server': guild.name,
         'server.name': guild.name,
         'server.id': guild.id,
       };
 
-      await this.sendEmbed(targetChannel, embed.data, context, `Goodbye: ${member.user.tag}`);
+      await this.sendEmbed(targetChannel, embed.data, context, `Goodbye: ${member.user?.tag || 'عضو غادرنا'}`);
       return true;
     } catch (err) {
       console.error('[EmbedHelper] sendGoodbyeEmbed failed:', err);
@@ -330,6 +345,75 @@ export class EmbedHelper {
     } catch (err) {
       console.error('[EmbedHelper] sendBoostEmbed failed:', err);
       return false;
+    }
+  }
+
+  /**
+   * Get system map embed showing embed assignments
+   * @param {string} guildId - The guild ID
+   * @returns {Promise<Object>} Embed data object
+   */
+  async getSystemMap(guildId) {
+    try {
+      const config = await GuildConfig.findOne({ guildId });
+
+      const fields = [];
+
+      // Welcome
+      const welcomeEmbed = config?.welcome?.embedName || 'None';
+      fields.push({
+        name: '👋 Welcome Message',
+        value: welcomeEmbed,
+        inline: true,
+      });
+
+      // Goodbye
+      const goodbyeEmbed = config?.goodbye?.embedName || 'None';
+      fields.push({
+        name: '👋 Goodbye Message',
+        value: goodbyeEmbed,
+        inline: true,
+      });
+
+      // Boost
+      const boostEmbed = config?.boost?.embedName || 'None';
+      fields.push({
+        name: '🚀 Server Boost',
+        value: boostEmbed,
+        inline: true,
+      });
+
+      // Partners
+      if (config?.partners && config.partners.length > 0) {
+        config.partners.forEach((partner, index) => {
+          fields.push({
+            name: `🤝 Partner ${index + 1}: ${partner.inviteLink}`,
+            value: partner.embedName || 'None',
+            inline: false,
+          });
+        });
+      } else {
+        fields.push({
+          name: '🤝 Partner Invites',
+          value: 'None configured',
+          inline: false,
+        });
+      }
+
+      return {
+        title: '🗺️ Empire System Map',
+        description: 'Current embed assignments across the server',
+        color: 0xDAA520, // Gold
+        fields,
+        footer: { text: 'Embed Vault Integration' },
+      };
+    } catch (err) {
+      console.error('[EmbedHelper] getSystemMap failed:', err);
+      return {
+        title: '🗺️ Empire System Map',
+        description: 'Error loading system map',
+        color: 0xFF0000,
+      };
     }
   }
 

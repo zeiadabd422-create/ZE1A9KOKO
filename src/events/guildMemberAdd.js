@@ -24,7 +24,7 @@ export default {
       // Delegate to unified EmbedHelper welcome path
       if (client && client.embedHelper && typeof client.embedHelper.sendWelcomeEmbed === 'function') {
         try {
-          console.log(`[GuildMemberAdd] New member: ${member.user.tag} (invite: ${usedInviteCode || 'unknown'})`);
+          console.log(`[GuildMemberAdd] New member: ${member.user?.tag || 'Unknown'} (invite: ${usedInviteCode || 'unknown'})`);
           await client.embedHelper.sendWelcomeEmbed(member, usedInviteCode);
         } catch (err) {
           console.error('[EmbedHelper] sendWelcomeEmbed error:', err);

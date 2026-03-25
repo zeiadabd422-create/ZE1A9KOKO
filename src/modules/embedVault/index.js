@@ -260,20 +260,38 @@ export default function EmbedVaultModule(client) {
       
       try {
         if (!interaction.isStringSelectMenu()) return;
-        if (interaction.customId !== 'embedvault_select') return;
+        const { customId } = interaction;
+        const selectedValue = interaction.values?.[0];
 
-        const selectedName = interaction.values?.[0];
-        if (!selectedName) {
-          return await interaction.editReply({ content: '❌ لم يتم تحديد إمبد.', components: [] });
+        if (customId === 'embedvault_select') {
+          if (!selectedValue) {
+            return await interaction.editReply({ content: '❌ لم يتم تحديد إمبد.', components: [] });
+          }
+
+          const embedDoc = await this.getByName(interaction.guildId, selectedValue);
+          if (!embedDoc) {
+            return await interaction.editReply({ content: `❌ لم يتم العثور على الإمبد: **${selectedValue}**`, components: [] });
+          }
+
+          // Open modular editor - will use editReply due to deferUpdate
+          await this.openModularEditor(interaction, embedDoc);
+        } else if (customId === 'embedvault_action') {
+          if (!selectedValue) return;
+
+          if (selectedValue === 'action_create') {
+            await this.openVisualEditor(interaction);
+          } else if (selectedValue === 'action_import') {
+            await this.openImportModal(interaction);
+          } else if (selectedValue.startsWith('action_prev:')) {
+            const page = Math.max(0, parseInt(selectedValue.split(':')[1]) - 1);
+            manager.embedVaultModule = this;
+            return manager.updateManager(interaction, page);
+          } else if (selectedValue.startsWith('action_next:')) {
+            const page = parseInt(selectedValue.split(':')[1]) + 1;
+            manager.embedVaultModule = this;
+            return manager.updateManager(interaction, page);
+          }
         }
-
-        const embedDoc = await this.getByName(interaction.guildId, selectedName);
-        if (!embedDoc) {
-          return await interaction.editReply({ content: `❌ لم يتم العثور على الإمبد: **${selectedName}**`, components: [] });
-        }
-
-        // Open modular editor - will use editReply due to deferUpdate
-        await this.openModularEditor(interaction, embedDoc);
       } catch (err) {
         console.error('[EmbedVaultModule.handleSelectMenu]', err);
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
@@ -286,21 +304,6 @@ export default function EmbedVaultModule(client) {
       try {
         if (!interaction.isButton()) return;
         const { customId } = interaction;
-
-        // Manager Pagination - use manager.updateManager after deferUpdate
-        if (customId.startsWith('embedvault_manager_prev:')) {
-          await interaction.deferUpdate();
-          const page = Math.max(0, parseInt(customId.split(':')[1]) - 1);
-          manager.embedVaultModule = this;
-          return manager.updateManager(interaction, page);
-        }
-
-        if (customId.startsWith('embedvault_manager_next:')) {
-          await interaction.deferUpdate();
-          const page = parseInt(customId.split(':')[1]) + 1;
-          manager.embedVaultModule = this;
-          return manager.updateManager(interaction, page);
-        }
 
         // Embed Selection (New Premium Button System)
         if (customId.startsWith('embedvault_select:')) {
