@@ -190,7 +190,7 @@ export class EmbedHelper {
       if (usedInviteCode) {
         let partnerRoleId = null;
         if (config?.partners) {
-          const partner = config.partners.find(p => p.inviteLink === usedInviteCode);
+          const partner = config.partners.find(p => p.inviteLink.split('/').pop() === usedInviteCode);
           if (partner) {
             partnerRoleId = partner.roleId;
           }

@@ -5,8 +5,6 @@
 // (`config.gateway`) so future changes remain consistent with the naming
 // conventions used elsewhere.
 
-import GatewayConfig from '../modules/gateway/schema.js';
-
 export default {
   name: 'guildMemberAdd',
   async execute(member) {
