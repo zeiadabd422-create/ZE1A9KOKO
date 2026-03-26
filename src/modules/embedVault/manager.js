@@ -211,7 +211,6 @@ export default function EmbedManagerModule() {
           .setColor(0xDAA520) // Professional gold color (#DAA520)
           .setTitle('📦 لوحة تحكم الخزنة الإمبراطورية')
           .setDescription(`**${embeds.length}** إمبد في الخزنة\n**الصفحة ${page + 1}/${totalPages}** — استخدم القوائم أدناه`)
-          .setThumbnail('https://cdn.discordapp.com/emojis/1234567890123456789.png') // Alya logo/placeholder
           .setFooter({ text: '⚙️ نظام إدارة الإمبد المتقدم • Advanced Embed Management System' });
 
         // Action select menu
