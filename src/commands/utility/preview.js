@@ -24,7 +24,7 @@ export default {
       } catch {
         return interaction.reply({
           content: '❌ Invalid JSON: تأكد من كتابة الكود بصيغة JSON صحيحة.',
-          ephemeral: true,
+          flags: [MessageFlags.Ephemeral],
         });
       }
 
@@ -34,13 +34,13 @@ export default {
       // FIX – render() returns a plain object; discord.js v14 requires an EmbedBuilder instance
       const embed = new EmbedBuilder(rendered);
 
-      return interaction.reply({ embeds: [embed], ephemeral: true });
+      return interaction.reply({ embeds: [embed], flags: [MessageFlags.Ephemeral] });
     } catch (err) {
       console.error('[COMMAND-ERROR] Preview Failed:', err);
       if (!interaction.replied && !interaction.deferred) {
         await interaction.reply({
           content: '⚠️ حدث خطأ أثناء معالجة الإيمبد. تأكد من أن الحقول تتبع معايير ديسكورد.',
-          ephemeral: true,
+          flags: [MessageFlags.Ephemeral],
         });
       }
     }

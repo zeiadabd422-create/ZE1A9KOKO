@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import GuildConfig from '../../modules/config/GuildConfig.js';
 
 export default {
@@ -14,7 +14,7 @@ export default {
   async execute(interaction) {
     try {
       if (!interaction.memberPermissions?.has('Administrator')) {
-        return interaction.reply({ content: '❌ Admin permission required.', ephemeral: true });
+        return interaction.editReply({ content: '❌ Admin permission required.' });
       }
 
       const sub = interaction.options.getSubcommand();
@@ -23,12 +23,16 @@ export default {
         return await showSystemDashboard(interaction);
       }
 
-      return interaction.reply({ content: 'أمر فرعي غير معروف.', ephemeral: true });
+      return interaction.editReply({ content: 'أمر فرعي غير معروف.' });
     } catch (err) {
       console.error('[system command] Error:', err);
       try {
-        if (interaction.isRepliable() && !interaction.replied) {
-          await interaction.reply({ content: '❌ An error occurred.', ephemeral: true });
+        if (interaction.isRepliable()) {
+          if (interaction.deferred || interaction.replied) {
+            await interaction.editReply({ content: '❌ An error occurred.' }).catch(() => {});
+          } else {
+            await interaction.reply({ content: '❌ An error occurred.', flags: [MessageFlags.Ephemeral] });
+          }
         }
       } catch (e) {
         console.error('[system command] Reply error:', e);
@@ -61,10 +65,9 @@ async function showSystemDashboard(interaction) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  return interaction.reply({
+  return interaction.editReply({
     embeds: [embed],
     components: [row],
-    ephemeral: true,
   });
 }
 

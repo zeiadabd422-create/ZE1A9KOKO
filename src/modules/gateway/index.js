@@ -1,7 +1,7 @@
 import GatewayConfig from './schema.js';
 import { checkTriggerWord } from './checker.js';
 import { verifyMember, createEmbed, startDMVerification, startStrictGauntlet, DEFAULT_ID_CARD, getLockdownResponse, sendVerificationPrompt } from './actions.js';
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 
 export default function GatewayModule(client) {
   return {
@@ -121,13 +121,13 @@ export default function GatewayModule(client) {
           return; // not relevant
         }
 
-        await interaction.deferReply({ ephemeral: true });
+        await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
         const lockdownResult = await getLockdownResponse(interaction.member, config, method);
         if (lockdownResult) {
           if (lockdownResult.queueFull) {
             if (interaction.isRepliable()) {
-              await interaction.followUp({ content: '⚠️ Wait a moment, the queue is full.', ephemeral: true });
+              await interaction.followUp({ content: '⚠️ Wait a moment, the queue is full.', flags: [MessageFlags.Ephemeral] });
             }
             return;
           }
@@ -135,7 +135,7 @@ export default function GatewayModule(client) {
             if (interaction.isRepliable()) {
               await interaction.followUp({
                 content: "❌ I cannot DM you. Please enable 'Allow Direct Messages' in your privacy settings and try again.",
-                ephemeral: true,
+                flags: [MessageFlags.Ephemeral],
               });
             }
             return;
@@ -143,7 +143,7 @@ export default function GatewayModule(client) {
           if (lockdownResult.already) {
             // already running gauntlet; reply with message
             if (interaction.isRepliable()) {
-              await interaction.followUp({ content: "⏳ لديك عملية توثيق نشطة بالفعل في الخاص، يرجى إكمالها.", ephemeral: true });
+              await interaction.followUp({ content: "⏳ لديك عملية توثيق نشطة بالفعل في الخاص، يرجى إكمالها.", flags: [MessageFlags.Ephemeral] });
             }
             return;
           }
@@ -151,19 +151,19 @@ export default function GatewayModule(client) {
             if (lockdownResult.lockdown === 2) {
               // Level 2: strict gauntlet, reply with token
               if (interaction.isRepliable()) {
-                await interaction.followUp({ content: `🔒 Security Lockdown Active. Check your DMs to complete advanced human verification.\n\n**Token:** \`${lockdownResult.token}\`\n⚠️ تنبيه: هذا الرمز ينتهي خلال 90 ثانية.`, ephemeral: true });
+                await interaction.followUp({ content: `🔐 Security Lockdown Active. Check your DMs to complete advanced human verification.\n\n**Token:** \`${lockdownResult.token}\`\n⚠️ تنبيه: هذا الرمز ينتهي خلال 90 ثانية.`, flags: [MessageFlags.Ephemeral] });
               }
             } else {
               // Level 1: simple gauntlet
               startDMVerification(interaction.member, config).catch(err => console.error('[Gateway] lockdown DM flow error', err));
               if (interaction.isRepliable()) {
-                await interaction.followUp({ content: '⚠️ Security Lockdown Active. Check your DMs to complete advanced human verification.', ephemeral: true });
+                await interaction.followUp({ content: '⚠️ Security Lockdown Active. Check your DMs to complete advanced human verification.', flags: [MessageFlags.Ephemeral] });
               }
             }
             return;
           } else if (lockdownResult.lockdown === 3) {
             if (interaction.isRepliable()) {
-              await interaction.followUp({ content: lockdownResult.message, ephemeral: true });
+              await interaction.followUp({ content: lockdownResult.message, flags: [MessageFlags.Ephemeral] });
             }
             return;
           }
@@ -171,7 +171,7 @@ export default function GatewayModule(client) {
         const result = lockdownResult && !lockdownResult.lockdown ? lockdownResult : await verifyMember(interaction.member, config, method);
         if (result.processing) {
           if (interaction.isRepliable()) {
-            await interaction.followUp({ content: '⏳ Please wait...', ephemeral: true }).catch(() => {});
+            await interaction.followUp({ content: '⏳ Please wait...', flags: [MessageFlags.Ephemeral] }).catch(() => {});
           }
           return;
         }
@@ -210,14 +210,14 @@ export default function GatewayModule(client) {
           if (interaction.isRepliable()) {
             await interaction.followUp({
               content: "❌ I cannot DM you. Please enable 'Allow Direct Messages' in your privacy settings and try again.",
-              ephemeral: true,
+              flags: [MessageFlags.Ephemeral],
             });
           }
           return;
         }
 
         const errorEmbed = await createEmbed(config, result.message || 'Verification failed.', 'error', interaction.member);
-        await interaction.followUp({ embeds: [errorEmbed], ephemeral: true });
+        await interaction.followUp({ embeds: [errorEmbed], flags: [MessageFlags.Ephemeral] });
       } catch (err) {
         console.error('[GatewayModule.handleInteraction] Error:', err);
       }

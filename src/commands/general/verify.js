@@ -8,7 +8,7 @@ export default {
     .setDescription('بدء عملية التحقق • Run the verification flow.'),
   async execute(interaction) {
     try {
-      await interaction.deferReply({ ephemeral: true });
+      await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
 
       const { guild, member } = interaction;
       const config = await GatewayConfig.findOne({ guildId: guild.id });

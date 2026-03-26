@@ -21,7 +21,7 @@ export default function EmbedManagerModule() {
     async displayManager(interaction, page = 0) {
       try {
         if (!this.embedVaultModule) {
-          return interaction.reply({ content: '❌ خزنة الإمبد لم تُهيّأ.', ephemeral: true });
+          return interaction.reply({ content: '❌ خزنة الإمبد لم تُهيّأ.', flags: [MessageFlags.Ephemeral] });
         }
 
         const embeds = await this.embedVaultModule.list(interaction.guildId);
@@ -37,7 +37,7 @@ export default function EmbedManagerModule() {
                   .setStyle(ButtonStyle.Primary)
               ),
             ],
-            ephemeral: true,
+            flags: [MessageFlags.Ephemeral],
           });
         }
 
@@ -109,14 +109,14 @@ export default function EmbedManagerModule() {
         return interaction.reply({
           embeds: [dashboardEmbed],
           components: [actionRow, menuRow],
-          ephemeral: true,
+          flags: [MessageFlags.Ephemeral],
         });
       } catch (err) {
         console.error('[EmbedManager.displayManager] Error:', err);
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
           await interaction.reply({
             content: '❌ فشل تحميل لوحة التحكم.',
-            ephemeral: true,
+            flags: [MessageFlags.Ephemeral],
           });
         }
       }
@@ -148,7 +148,7 @@ export default function EmbedManagerModule() {
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
           await interaction.reply({
             content: '❌ فشل اختيار الإمبد.',
-            ephemeral: true,
+            flags: [MessageFlags.Ephemeral],
           });
         }
       }
@@ -288,7 +288,7 @@ export default function EmbedManagerModule() {
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
           await interaction.reply({
             content: '❌ خطأ في الترقيم.',
-            ephemeral: true,
+            flags: [MessageFlags.Ephemeral],
           });
         }
       }

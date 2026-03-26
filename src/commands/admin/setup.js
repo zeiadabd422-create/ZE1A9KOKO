@@ -68,7 +68,7 @@ export default {
   async execute(interaction) {
     try {
       if (!interaction.memberPermissions?.has('Administrator')) {
-        return interaction.reply({ content: '❌ Admin permission required.', ephemeral: true });
+        return interaction.reply({ content: '❌ Admin permission required.', flags: [MessageFlags.Ephemeral] });
       }
 
       const sub = interaction.options.getSubcommand();
@@ -90,12 +90,12 @@ export default {
 
         // Get embeds for select menu
         if (!interaction.client.embedVault) {
-          return interaction.reply({ content: '❌ EmbedVault module is not loaded.', ephemeral: true });
+          return interaction.reply({ content: '❌ EmbedVault module is not loaded.', flags: [MessageFlags.Ephemeral] });
         }
 
         const embeds = await interaction.client.embedVault.list(interaction.guildId);
         if (embeds.length === 0) {
-          return interaction.reply({ content: '❌ No embeds found in vault. Create some embeds first.', ephemeral: true });
+          return interaction.reply({ content: '❌ No embeds found in vault. Create some embeds first.', flags: [MessageFlags.Ephemeral] });
         }
 
         const options = embeds.map(embed => ({
@@ -113,7 +113,7 @@ export default {
         return interaction.reply({
           content: `✅ **Welcome Setup Started!**\n📢 Channel: ${channel}\n🔑 Auto-Role: ${autoRole}\n\n🎯 **Select the embed to use for welcome messages:**`,
           components: [row],
-          ephemeral: true,
+          flags: [MessageFlags.Ephemeral],
         });
       }
 
@@ -132,12 +132,12 @@ export default {
 
         // Get embeds for select menu
         if (!interaction.client.embedVault) {
-          return interaction.reply({ content: '❌ EmbedVault module is not loaded.', ephemeral: true });
+          return interaction.reply({ content: '❌ EmbedVault module is not loaded.', flags: [MessageFlags.Ephemeral] });
         }
 
         const embeds = await interaction.client.embedVault.list(interaction.guildId);
         if (embeds.length === 0) {
-          return interaction.reply({ content: '❌ No embeds found in vault. Create some embeds first.', ephemeral: true });
+          return interaction.reply({ content: '❌ No embeds found in vault. Create some embeds first.', flags: [MessageFlags.Ephemeral] });
         }
 
         const options = embeds.map(embed => ({
@@ -155,7 +155,7 @@ export default {
         return interaction.reply({
           content: `✅ **Goodbye Setup Started!**\n📢 Channel: ${channel}\n\n🎯 **Select the embed to use for goodbye messages:**`,
           components: [row],
-          ephemeral: true,
+          flags: [MessageFlags.Ephemeral],
         });
       }
 
@@ -174,12 +174,12 @@ export default {
 
         // Get embeds for select menu
         if (!interaction.client.embedVault) {
-          return interaction.reply({ content: '❌ EmbedVault module is not loaded.', ephemeral: true });
+          return interaction.reply({ content: '❌ EmbedVault module is not loaded.', flags: [MessageFlags.Ephemeral] });
         }
 
         const embeds = await interaction.client.embedVault.list(interaction.guildId);
         if (embeds.length === 0) {
-          return interaction.reply({ content: '❌ No embeds found in vault. Create some embeds first.', ephemeral: true });
+          return interaction.reply({ content: '❌ No embeds found in vault. Create some embeds first.', flags: [MessageFlags.Ephemeral] });
         }
 
         const options = embeds.map(embed => ({
@@ -197,7 +197,7 @@ export default {
         return interaction.reply({
           content: `✅ **Boost Setup Started!**\n📢 Channel: ${channel}\n\n🎯 **Select the embed to use for boost messages:**`,
           components: [row],
-          ephemeral: true,
+          flags: [MessageFlags.Ephemeral],
         });
       }
 
@@ -216,19 +216,19 @@ export default {
 
         return interaction.reply({
           content: `✅ **Logs Setup Complete!**\n📋 Channel: ${channel}`,
-          ephemeral: true,
+          flags: [MessageFlags.Ephemeral],
         });
       }
 
       if (sub === 'partner') {
         // Get embeds for select menu
         if (!interaction.client.embedVault) {
-          return interaction.reply({ content: '❌ EmbedVault module is not loaded.', ephemeral: true });
+          return interaction.reply({ content: '❌ EmbedVault module is not loaded.', flags: [MessageFlags.Ephemeral] });
         }
 
         const embeds = await interaction.client.embedVault.list(interaction.guildId);
         if (embeds.length === 0) {
-          return interaction.reply({ content: '❌ No embeds found in vault. Create some embeds first.', ephemeral: true });
+          return interaction.reply({ content: '❌ No embeds found in vault. Create some embeds first.', flags: [MessageFlags.Ephemeral] });
         }
 
         const options = embeds.map(embed => ({
@@ -246,14 +246,14 @@ export default {
         return interaction.reply({
           content: `🎯 **Partner Setup Started!**\n\n**Step 1:** Select the embed to use for partner messages:`,
           components: [row],
-          ephemeral: true,
+          flags: [MessageFlags.Ephemeral],
         });
       }
     } catch (err) {
       console.error('[setup command] Error:', err);
       try {
         if (interaction.isRepliable() && !interaction.replied) {
-          await interaction.reply({ content: '❌ An error occurred during setup.', ephemeral: true });
+          await interaction.reply({ content: '❌ An error occurred during setup.', flags: [MessageFlags.Ephemeral] });
         }
       } catch (e) {
         console.error('[setup command] Reply error:', e);

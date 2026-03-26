@@ -8,6 +8,7 @@ import {
   TextInputBuilder,
   TextInputStyle,
   EmbedBuilder,
+  MessageFlags,
 } from 'discord.js';
 import { render, createPreview, validateEmbed } from '../../core/embedEngine.js';
 
@@ -172,7 +173,7 @@ export default function EmbedVaultModule(client) {
             content,
             embeds: [previewEmbed],
             components,
-            ephemeral: true,
+            flags: [MessageFlags.Ephemeral],
           });
         }
 
@@ -180,11 +181,11 @@ export default function EmbedVaultModule(client) {
           return await interaction.editReply({ content, components });
         }
         
-        return interaction.reply({ content, components, ephemeral: true });
+        return interaction.reply({ content, components, flags: [MessageFlags.Ephemeral] });
       } catch (err) {
         console.error('[EmbedVaultModule.openModularEditor]', err);
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-          await interaction.reply({ content: '❌ فشل فتح محرر الإمبد.', ephemeral: true });
+          await interaction.reply({ content: '❌ فشل فتح محرر الإمبد.', flags: [MessageFlags.Ephemeral] });
         }
       }
     },
@@ -295,7 +296,7 @@ export default function EmbedVaultModule(client) {
       } catch (err) {
         console.error('[EmbedVaultModule.handleSelectMenu]', err);
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-          await interaction.reply({ content: '❌ فشل اختيار الإمبد.', ephemeral: true });
+          await interaction.reply({ content: '❌ فشل اختيار الإمبد.', flags: [MessageFlags.Ephemeral] });
         }
       }
     },
@@ -309,7 +310,7 @@ export default function EmbedVaultModule(client) {
         if (customId.startsWith('embedvault_select:')) {
           const name = customId.split(':')[1];
           const embedDoc = await this.getByName(interaction.guildId, name);
-          if (!embedDoc) return interaction.reply({ content: '❌ Embed not found.', ephemeral: true });
+          if (!embedDoc) return interaction.reply({ content: '❌ Embed not found.', flags: [MessageFlags.Ephemeral] });
           return this.openModularEditor(interaction, embedDoc);
         }
 
@@ -317,7 +318,7 @@ export default function EmbedVaultModule(client) {
         if (customId.startsWith('embedvault_basicinfo:')) {
           const name = customId.split(':')[1];
           const embedDoc = await this.getByName(interaction.guildId, name);
-          if (!embedDoc) return interaction.reply({ content: '❌ Embed not found.', ephemeral: true });
+          if (!embedDoc) return interaction.reply({ content: '❌ Embed not found.', flags: [MessageFlags.Ephemeral] });
           return this.openBasicInfoModal(interaction, embedDoc);
         }
         if (customId === 'embedvault_basicinfo_create') {
@@ -328,7 +329,7 @@ export default function EmbedVaultModule(client) {
         if (customId.startsWith('embedvault_authorfooter:')) {
           const name = customId.split(':')[1];
           const embedDoc = await this.getByName(interaction.guildId, name);
-          if (!embedDoc) return interaction.reply({ content: '❌ Embed not found.', ephemeral: true });
+          if (!embedDoc) return interaction.reply({ content: '❌ Embed not found.', flags: [MessageFlags.Ephemeral] });
           return this.openAuthorFooterModal(interaction, embedDoc);
         }
         if (customId === 'embedvault_authorfooter_create') {
@@ -339,7 +340,7 @@ export default function EmbedVaultModule(client) {
         if (customId.startsWith('embedvault_images:')) {
           const name = customId.split(':')[1];
           const embedDoc = await this.getByName(interaction.guildId, name);
-          if (!embedDoc) return interaction.reply({ content: '❌ Embed not found.', ephemeral: true });
+          if (!embedDoc) return interaction.reply({ content: '❌ Embed not found.', flags: [MessageFlags.Ephemeral] });
           return this.openImagesModal(interaction, embedDoc);
         }
         if (customId === 'embedvault_images_create') {
@@ -350,7 +351,7 @@ export default function EmbedVaultModule(client) {
         if (customId.startsWith('embedvault_preview_modal:')) {
           const name = customId.split(':')[1];
           const embedDoc = await this.getByName(interaction.guildId, name);
-          if (!embedDoc) return interaction.reply({ content: '❌ Embed not found.', ephemeral: true });
+          if (!embedDoc) return interaction.reply({ content: '❌ Embed not found.', flags: [MessageFlags.Ephemeral] });
           return this.openLivePreviewModal(interaction, embedDoc);
         }
 
@@ -358,7 +359,7 @@ export default function EmbedVaultModule(client) {
         if (customId.startsWith('embedvault_send:')) {
           const name = customId.split(':')[1];
           const embedDoc = await this.getByName(interaction.guildId, name);
-          if (!embedDoc) return interaction.reply({ content: '❌ Embed not found.', ephemeral: true });
+          if (!embedDoc) return interaction.reply({ content: '❌ Embed not found.', flags: [MessageFlags.Ephemeral] });
           return this.openSendModal(interaction, embedDoc);
         }
 
@@ -376,13 +377,13 @@ export default function EmbedVaultModule(client) {
         if (customId.startsWith('embedvault_delete:')) {
           const name = customId.split(':')[1];
           await this.delete(interaction.guildId, name);
-          return interaction.reply({ content: `✅ Deleted **${name}** from vault.`, ephemeral: true });
+          return interaction.reply({ content: `✅ Deleted **${name}** from vault.`, flags: [MessageFlags.Ephemeral] });
         }
 
       } catch (err) {
         console.error('[EmbedVaultModule.handleButtonInteraction]', err);
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-          await interaction.reply({ content: '❌ Embed button action failed.', ephemeral: true });
+          await interaction.reply({ content: '❌ Embed button action failed.', flags: [MessageFlags.Ephemeral] });
         }
       }
     },
@@ -394,7 +395,7 @@ export default function EmbedVaultModule(client) {
 
         // ── Basic Info (create) ───────────────────────────────────────────────
         if (customId === 'embedvault_basicinfo_submit_create') {
-          await interaction.deferReply({ ephemeral: true });
+          await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
           
           const name = interaction.fields.getTextInputValue('embed_name').trim();
           const type = interaction.fields.getTextInputValue('embed_type').trim();
@@ -436,7 +437,7 @@ export default function EmbedVaultModule(client) {
 
         // ── Basic Info (edit) ─────────────────────────────────────────────────
         if (customId.startsWith('embedvault_basicinfo_submit:')) {
-          await interaction.deferReply({ ephemeral: true });
+          await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
           
           // Fix #4: Use .split(':').slice(1).join(':') to support names with colons
           const originalName = customId.split(':').slice(1).join(':');
@@ -502,7 +503,7 @@ export default function EmbedVaultModule(client) {
 
         // ── Author/Footer (create) ────────────────────────────────────────────
         if (customId === 'embedvault_authorfooter_submit_create') {
-          await interaction.deferReply({ ephemeral: true });
+          await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
           
           const authorName = interaction.fields.getTextInputValue('author_name') || '';
           const authorIcon = interaction.fields.getTextInputValue('author_icon') || '';
@@ -516,7 +517,7 @@ export default function EmbedVaultModule(client) {
 
         // ── Author/Footer (edit) ──────────────────────────────────────────────
         if (customId.startsWith('embedvault_authorfooter_submit:')) {
-          await interaction.deferReply({ ephemeral: true });
+          await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
           
           // Fix #4: Use .split(':').slice(1).join(':') to support names with colons
           const embedName = customId.split(':').slice(1).join(':');
@@ -556,7 +557,7 @@ export default function EmbedVaultModule(client) {
 
         // ── Images (create) ───────────────────────────────────────────────────
         if (customId === 'embedvault_images_submit_create') {
-          await interaction.deferReply({ ephemeral: true });
+          await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
           
           return interaction.editReply({
             content: '❌ لم يتم العثور على إمبد نشط. ابدأ من إنشاء إمبد أولاً.',
@@ -565,7 +566,7 @@ export default function EmbedVaultModule(client) {
 
         // ── Images (edit) ─────────────────────────────────────────────────────
         if (customId.startsWith('embedvault_images_submit:')) {
-          await interaction.deferReply({ ephemeral: true });
+          await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
           
           // Fix #4: Use .split(':').slice(1).join(':') to support names with colons
           const embedName = customId.split(':').slice(1).join(':');
@@ -619,7 +620,7 @@ export default function EmbedVaultModule(client) {
 
         // ── Send Embed (modal submit) ─────────────────────────────────────────
         if (customId.startsWith('embedvault_send_submit:')) {
-          await interaction.deferReply({ ephemeral: true });
+          await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
           
           // Fix #4: Use .split(':').slice(1).join(':') to support names with colons
           const embedName = customId.split(':').slice(1).join(':');
@@ -672,7 +673,7 @@ export default function EmbedVaultModule(client) {
 
         // ── Import Embed (modal submit) ───────────────────────────────────────
         if (customId === 'embedvault_import_submit') {
-          await interaction.deferReply({ ephemeral: true });
+          await interaction.deferReply({ flags: [MessageFlags.Ephemeral] });
           
           const jsonString = interaction.fields.getTextInputValue('json_data').trim();
           
@@ -719,7 +720,7 @@ export default function EmbedVaultModule(client) {
       } catch (err) {
         console.error('[EmbedVaultModule.handleModalSubmit]', err);
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-          await interaction.reply({ content: '❌ فشلت عملية الإمبد.', ephemeral: true });
+          await interaction.reply({ content: '❌ فشلت عملية الإمبد.', flags: [MessageFlags.Ephemeral] });
         } else if (interaction.deferred && !interaction.replied) {
           await interaction.editReply({ content: '❌ فشلت عملية الإمبد.' });
         }
@@ -867,7 +868,7 @@ export default function EmbedVaultModule(client) {
 
     async openLivePreviewModal(interaction, embedDoc) {
       if (!embedDoc) {
-        return interaction.reply({ content: '❌ لا توجد بيانات إمبد للمعاينة.', ephemeral: true });
+        return interaction.reply({ content: '❌ لا توجد بيانات إمبد للمعاينة.', flags: [MessageFlags.Ephemeral] });
       }
 
       try {
@@ -876,11 +877,11 @@ export default function EmbedVaultModule(client) {
         return interaction.reply({
           content: `## 👁️ معاينة مباشرة — **${embedDoc.name}**\n*الدوال المشروطة مرسومة ببيانات حسابك.*`,
           embeds: [previewEmbed],
-          ephemeral: true,
+          flags: [MessageFlags.Ephemeral],
         });
       } catch (err) {
         console.error('[EmbedVaultModule.openLivePreviewModal]', err);
-        return interaction.reply({ content: '❌ فشل في إنشاء المعاينة.', ephemeral: true });
+        return interaction.reply({ content: '❌ فشل في إنشاء المعاينة.', flags: [MessageFlags.Ephemeral] });
       }
     },
 

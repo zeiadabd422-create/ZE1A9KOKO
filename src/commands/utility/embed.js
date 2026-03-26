@@ -1,4 +1,4 @@
-import { SlashCommandBuilder } from 'discord.js';
+import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 
 // Autocomplete handler function
 async function handleNameAutocomplete(interaction) {
@@ -85,10 +85,10 @@ export default {
       const sub = interaction.options.getSubcommand();
 
       if (!interaction.memberPermissions?.has('Administrator')) {
-        return interaction.reply({ content: '❌ مطلوب صلاحية المسؤول.', ephemeral: true });
+        return interaction.editReply({ content: '❌ مطلوب صلاحية المسؤول.' });
       }
       if (!client.embedVault) {
-        return interaction.reply({ content: '❌ لم يتم تحميل وحدة EmbedVault.', ephemeral: true });
+        return interaction.editReply({ content: '❌ لم يتم تحميل وحدة EmbedVault.' });
       }
 
       if (sub === 'manager') {
@@ -102,9 +102,8 @@ export default {
 
         // Validate invite code format
         if (inviteCode.length < 2) {
-          return interaction.reply({
+          return interaction.editReply({
             content: '❌ صيغة رمز الدعوة غير صحيحة.',
-            ephemeral: true,
           });
         }
 
@@ -115,9 +114,8 @@ export default {
           partnerRole?.id || null
         );
         if (!updated) {
-          return interaction.reply({
+          return interaction.editReply({
             content: `❌ لم يتم العثور على الإمبد **${name}** في الخزنة.`,
-            ephemeral: true,
           });
         }
 
@@ -126,9 +124,8 @@ export default {
           confirmMsg += `\n🔗 دور الشريك المرتبط: ${partnerRole}`;
         }
 
-        return interaction.reply({
+        return interaction.editReply({
           content: confirmMsg,
-          ephemeral: true,
         });
       }
 
@@ -137,24 +134,26 @@ export default {
         const deleted = await client.embedVault.delete(interaction.guildId, name);
 
         if (!deleted) {
-          return interaction.reply({
+          return interaction.editReply({
             content: `❌ لم يتم العثور على الإمبد **${name}** في الخزنة.`,
-            ephemeral: true,
           });
         }
 
-        return interaction.reply({
+        return interaction.editReply({
           content: `✅ تم حذف **${name}** من الخزنة.`,
-          ephemeral: true,
         });
       }
 
-      return interaction.reply({ content: 'أمر فرعي غير معروف.', ephemeral: true });
+      return interaction.editReply({ content: 'أمر فرعي غير معروف.' });
     } catch (err) {
       console.error('[embed command] Error:', err);
       try {
-        if (interaction.isRepliable() && !interaction.replied) {
-          await interaction.reply({ content: 'حدث خطأ في معالجة أمر الإمبد.', ephemeral: true });
+        if (interaction.isRepliable()) {
+          if (interaction.deferred || interaction.replied) {
+            await interaction.editReply({ content: 'حدث خطأ في معالجة أمر الإمبد.' }).catch(() => {});
+          } else {
+            await interaction.reply({ content: 'حدث خطأ في معالجة أمر الإمبد.', flags: [MessageFlags.Ephemeral] });
+          }
         }
       } catch (e) {
         console.error('[embed command] Reply error:', e);

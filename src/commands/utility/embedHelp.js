@@ -190,7 +190,7 @@ export default {
     const response = await interaction.reply({
       embeds: [pages[currentPage]],
       components: [buildButtonRow(currentPage, totalPages)],
-      ephemeral: true,
+      flags: [MessageFlags.Ephemeral],
     });
 
     // Create message component collector
@@ -203,7 +203,7 @@ export default {
       if (buttonInteraction.user.id !== interaction.user.id) {
         return buttonInteraction.reply({
           content: '❌ You can only use buttons on your own help message.',
-          ephemeral: true,
+          flags: [MessageFlags.Ephemeral],
         });
       }
 
@@ -215,7 +215,7 @@ export default {
         collector.stop();
         return buttonInteraction.reply({
           content: '❌ Help closed.',
-          ephemeral: true,
+          flags: [MessageFlags.Ephemeral],
         });
       }
 

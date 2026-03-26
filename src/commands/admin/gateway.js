@@ -208,7 +208,7 @@ export default {
       if (!interaction.memberPermissions?.has('Administrator')) {
         await interaction.reply({
           content: '❌ You need Administrator permissions to use this command.',
-          ephemeral: true,
+          flags: [MessageFlags.Ephemeral],
         });
         return;
       }
@@ -216,7 +216,7 @@ export default {
       if (!client.gateway) {
         await interaction.reply({
           content: '❌ Gateway module is not loaded.',
-          ephemeral: true,
+          flags: [MessageFlags.Ephemeral],
         });
         return;
       }
@@ -236,7 +236,7 @@ export default {
         if (!channel) {
           await interaction.reply({
             content: `❌ Channel is required for ${method} method.`,
-            ephemeral: true,
+            flags: [MessageFlags.Ephemeral],
           });
           return;
         }
@@ -245,7 +245,7 @@ export default {
         if (method === 'trigger' && !triggerWord?.trim()) {
           await interaction.reply({
             content: '❌ Trigger word is required for trigger method.',
-            ephemeral: true,
+            flags: [MessageFlags.Ephemeral],
           });
           return;
         }
@@ -278,12 +278,12 @@ export default {
 
           await interaction.reply({
             content: `✅ **${methodNames[method]}** method configured!\n\n${details.join('\n')}${channel ? '\n✉️ Verification message sent to channel.' : ''}`,
-            ephemeral: true,
+            flags: [MessageFlags.Ephemeral],
           });
         } else {
           await interaction.reply({
             content: `❌ Setup failed: ${result.error}`,
-            ephemeral: true,
+            flags: [MessageFlags.Ephemeral],
           });
         }
       } else if (subcommand === 'set_admin_log') {
@@ -293,7 +293,7 @@ export default {
         if (!cfg) {
           await interaction.reply({
             content: '❌ يجب إعداد البوابة أولاً باستخدام /gateway setup قبل تحديد قناة السجل.',
-            ephemeral: true,
+            flags: [MessageFlags.Ephemeral],
           });
           return;
         }
@@ -303,7 +303,7 @@ export default {
 
         await interaction.reply({
           content: `✅ Admin log channel set to <#${channel.id}>.`,
-          ephemeral: true,
+          flags: [MessageFlags.Ephemeral],
         });
       } else if (subcommand === 'customize_ui') {
         const page = options.getString('page', true);
@@ -361,7 +361,7 @@ export default {
           await interaction.reply({
             content: result.success ? `✅ **${page}** customization updated!` : `❌ Update failed: ${result.error}`,
             ...replyOptions,
-            ephemeral: true,
+            flags: [MessageFlags.Ephemeral],
           });
           // fetch the actual message object so we can track its id
           try {
@@ -386,13 +386,13 @@ export default {
             if (!edited) {
               await interaction.followUp({
                 content: updates.join('\n') || 'No changes made.',
-                ephemeral: true,
+                flags: [MessageFlags.Ephemeral],
               });
             }
           } else if (!edited) {
             await interaction.followUp({
               content: `❌ Update failed: ${result.error}`,
-              ephemeral: true,
+              flags: [MessageFlags.Ephemeral],
             });
           }
         }
@@ -402,7 +402,7 @@ export default {
         if (!cfg) {
           await interaction.reply({
             content: '❌ يجب إعداد البوابة أولاً باستخدام /gateway setup قبل تغيير مستوى القفل.',
-            ephemeral: true,
+            flags: [MessageFlags.Ephemeral],
           });
           return;
         }
@@ -413,7 +413,7 @@ export default {
         const descriptions = ['Normal', 'Simple DM Gauntlet', 'Strict DM Gauntlet', 'System Closed'];
         await interaction.reply({
           content: `🔒 Lockdown level set to **${level} – ${descriptions[level] || 'Unknown'}**.`,
-          ephemeral: true,
+          flags: [MessageFlags.Ephemeral],
         });
       } else if (subcommand === 'customize_logic') {
         const method = options.getString('method', true);
@@ -481,7 +481,7 @@ export default {
 
         await interaction.reply({
           content: `${overallSuccess ? '✅' : '⚠️'} ${replyParts.join('\n')}`,
-          ephemeral: true,
+          flags: [MessageFlags.Ephemeral],
         });
       } else if (subcommand === 'status') {
         const GatewayConfig = (await import('../../modules/gateway/schema.js')).default;
@@ -490,7 +490,7 @@ export default {
         if (!config || !config.enabled) {
           await interaction.reply({
             content: '❌ Gateway is not configured for this server.\n\nUse `/gateway setup` to configure it.',
-            ephemeral: true,
+            flags: [MessageFlags.Ephemeral],
           });
           return;
         }
@@ -554,7 +554,7 @@ export default {
 
         await interaction.reply({
           embeds: [embed],
-          ephemeral: true,
+          flags: [MessageFlags.Ephemeral],
         });
       }
     } catch (err) {
@@ -563,7 +563,7 @@ export default {
         if (interaction.isRepliable() && !interaction.replied) {
           await interaction.reply({
             content: '❌ An error occurred while executing this command.',
-            ephemeral: true,
+            flags: [MessageFlags.Ephemeral],
           });
         }
       } catch (replyErr) {

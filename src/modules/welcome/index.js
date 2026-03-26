@@ -98,7 +98,7 @@ class WelcomeModule {
     try {
       return interaction.reply({
         content: '⚠️ Deprecated welcome modal submission path. Please use the new unified configuration.',
-        ephemeral: true,
+        flags: [MessageFlags.Ephemeral],
       });
     } catch (err) {
       console.error('[WelcomeModule.handleModalSubmit]', err);

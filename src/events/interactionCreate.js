@@ -1,6 +1,6 @@
 import { buildPages } from '../commands/utility/embedHelp.js';
 import GuildConfig from '../modules/config/GuildConfig.js';
-import { ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 
 export default {
   name: 'interactionCreate',
@@ -39,7 +39,7 @@ export default {
       // ── Slash Commands ──────────────────────────────────────────────────────
       if (interaction.isChatInputCommand()) {
         if (!interaction.deferred && !interaction.replied) {
-          await interaction.deferReply({ ephemeral: true }).catch(() => {});
+          await interaction.deferReply({ flags: [MessageFlags.Ephemeral] }).catch(() => {});
         }
         const command = client.commands.get(interaction.commandName);
         if (!command) return;
@@ -48,8 +48,12 @@ export default {
         } catch (cmdErr) {
           console.error(`[Command: ${interaction.commandName}] Execution error:`, cmdErr);
           try {
-            if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-              await interaction.reply({ content: '❌ An error occurred executing the command.', ephemeral: true });
+            if (interaction.isRepliable()) {
+              if (interaction.deferred || interaction.replied) {
+                await interaction.editReply({ content: '❌ An error occurred executing the command.' }).catch(() => {});
+              } else {
+                await interaction.reply({ content: '❌ An error occurred executing the command.', flags: [MessageFlags.Ephemeral] });
+              }
             }
           } catch (replyErr) {
             console.error('[Slash Command] Failed to send error reply:', replyErr);
@@ -109,8 +113,12 @@ export default {
         } catch (err) {
           console.error('[Button Interaction] Error:', err);
           try {
-            if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-              await interaction.reply({ content: '❌ An error occurred processing your interaction.', ephemeral: true });
+            if (interaction.isRepliable()) {
+              if (interaction.deferred || interaction.replied) {
+                await interaction.editReply({ content: '❌ An error occurred processing your interaction.' }).catch(() => {});
+              } else {
+                await interaction.reply({ content: '❌ An error occurred processing your interaction.', flags: [MessageFlags.Ephemeral] });
+              }
             }
           } catch (replyErr) {
             console.error('[Button] Failed to send error reply:', replyErr);
@@ -119,7 +127,7 @@ export default {
 
         // Catch-all in case no handler responded for a button interaction
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-          await interaction.reply({ content: '❌ Unable to process button interaction at this time.', ephemeral: true });
+          await interaction.reply({ content: '❌ Unable to process button interaction at this time.', flags: [MessageFlags.Ephemeral] });
         }
 
         return;
@@ -128,7 +136,7 @@ export default {
       // ── Modal Submissions ────────────────────────────────────────────────────
       if (interaction.isModalSubmit()) {
         if (!interaction.deferred && !interaction.replied) {
-          await interaction.deferReply({ ephemeral: true }).catch(() => {});
+          await interaction.deferReply({ flags: [MessageFlags.Ephemeral] }).catch(() => {});
         }
         try {
           if (interaction.customId.startsWith('setup_partner_invite:')) {
@@ -175,7 +183,7 @@ export default {
               if (interaction.deferred || interaction.replied) {
                 await interaction.editReply({ content: '❌ Failed to process your submission.' }).catch(() => {});
               } else {
-                await interaction.reply({ content: '❌ Failed to process your submission.', ephemeral: true });
+                await interaction.reply({ content: '❌ Failed to process your submission.', flags: [MessageFlags.Ephemeral] });
               }
             }
           } catch (replyErr) {
@@ -185,7 +193,7 @@ export default {
 
         // Catch-all in case no modal handler responded
         if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-          await interaction.reply({ content: '❌ Unable to process modal submission at this time.', ephemeral: true });
+          await interaction.reply({ content: '❌ Unable to process modal submission at this time.', flags: [MessageFlags.Ephemeral] });
         }
 
         return;
@@ -275,7 +283,7 @@ export default {
           console.error('[Select Menu] Error:', err);
           try {
             if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-              await interaction.reply({ content: '❌ An error occurred.', ephemeral: true });
+              await interaction.reply({ content: '❌ An error occurred.', flags: [MessageFlags.Ephemeral] });
             }
           } catch (replyErr) {
             console.error('[Select Menu] Failed to send error reply:', replyErr);
@@ -286,7 +294,7 @@ export default {
       console.error('[interactionCreate] Handler failed:', err);
       try {
         if (interaction?.isRepliable?.() && !interaction.replied && !interaction.deferred) {
-          await interaction.reply({ content: '❌ Internal error.', ephemeral: true });
+          await interaction.reply({ content: '❌ Internal error.', flags: [MessageFlags.Ephemeral] });
         }
       } catch (e) {
         console.error('[interactionCreate] Failed to send final error reply:', e);
