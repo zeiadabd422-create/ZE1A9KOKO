@@ -305,7 +305,7 @@ export default {
 
 // ── System Dashboard Handlers ──────────────────────────────────────────────
 async function handleSystemTab(interaction) {
-  await interaction.deferUpdate();
+  // deferUpdate already called in the parent button handler — do NOT call again
 
   const { client, guild } = interaction;
   const config = await GuildConfig.findOne({ guildId: guild.id });
@@ -328,7 +328,7 @@ async function handleSystemTab(interaction) {
 }
 
 async function handleSystemPartnersPagination(interaction) {
-  await interaction.deferUpdate();
+  // deferUpdate already called in the parent button handler — do NOT call again
 
   const { client, guild } = interaction;
   const config = await GuildConfig.findOne({ guildId: guild.id });

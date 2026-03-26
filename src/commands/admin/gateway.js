@@ -206,7 +206,7 @@ export default {
       const { client, guild, options } = interaction;
 
       if (!interaction.memberPermissions?.has('Administrator')) {
-        await interaction.reply({
+        await interaction.editReply({
           content: '❌ You need Administrator permissions to use this command.',
           flags: [MessageFlags.Ephemeral],
         });
@@ -214,7 +214,7 @@ export default {
       }
 
       if (!client.gateway) {
-        await interaction.reply({
+        await interaction.editReply({
           content: '❌ Gateway module is not loaded.',
           flags: [MessageFlags.Ephemeral],
         });
@@ -234,7 +234,7 @@ export default {
 
         // Validate: methods other than 'join' require a channel
         if (!channel) {
-          await interaction.reply({
+          await interaction.editReply({
             content: `❌ Channel is required for ${method} method.`,
             flags: [MessageFlags.Ephemeral],
           });
@@ -243,7 +243,7 @@ export default {
 
         // Validate: trigger needs a trigger word
         if (method === 'trigger' && !triggerWord?.trim()) {
-          await interaction.reply({
+          await interaction.editReply({
             content: '❌ Trigger word is required for trigger method.',
             flags: [MessageFlags.Ephemeral],
           });
@@ -276,12 +276,12 @@ export default {
           if (methodVerifiedRole) details.push(`**Method Verified Role:** <@&${methodVerifiedRole.id}>`);
           if (methodUnverifiedRole) details.push(`**Method Unverified Role:** <@&${methodUnverifiedRole.id}>`);
 
-          await interaction.reply({
+          await interaction.editReply({
             content: `✅ **${methodNames[method]}** method configured!\n\n${details.join('\n')}${channel ? '\n✉️ Verification message sent to channel.' : ''}`,
             flags: [MessageFlags.Ephemeral],
           });
         } else {
-          await interaction.reply({
+          await interaction.editReply({
             content: `❌ Setup failed: ${result.error}`,
             flags: [MessageFlags.Ephemeral],
           });
@@ -291,7 +291,7 @@ export default {
 
         let cfg = await GatewayConfig.findOne({ guildId: guild.id });
         if (!cfg) {
-          await interaction.reply({
+          await interaction.editReply({
             content: '❌ يجب إعداد البوابة أولاً باستخدام /gateway setup قبل تحديد قناة السجل.',
             flags: [MessageFlags.Ephemeral],
           });
@@ -301,7 +301,7 @@ export default {
         cfg.adminLogChannel = channel.id;
         await cfg.save();
 
-        await interaction.reply({
+        await interaction.editReply({
           content: `✅ Admin log channel set to <#${channel.id}>.`,
           flags: [MessageFlags.Ephemeral],
         });
@@ -358,7 +358,7 @@ export default {
 
         if (!edited) {
           const replyOptions = previewEmbed ? { embeds: [previewEmbed] } : {};
-          await interaction.reply({
+          await interaction.editReply({
             content: result.success ? `✅ **${page}** customization updated!` : `❌ Update failed: ${result.error}`,
             ...replyOptions,
             flags: [MessageFlags.Ephemeral],
@@ -400,7 +400,7 @@ export default {
         const level = options.getInteger('level', true);
         let cfg = await GatewayConfig.findOne({ guildId: guild.id });
         if (!cfg) {
-          await interaction.reply({
+          await interaction.editReply({
             content: '❌ يجب إعداد البوابة أولاً باستخدام /gateway setup قبل تغيير مستوى القفل.',
             flags: [MessageFlags.Ephemeral],
           });
@@ -411,7 +411,7 @@ export default {
         cfg.lockdownMode = level > 0;
         await cfg.save();
         const descriptions = ['Normal', 'Simple DM Gauntlet', 'Strict DM Gauntlet', 'System Closed'];
-        await interaction.reply({
+        await interaction.editReply({
           content: `🔒 Lockdown level set to **${level} – ${descriptions[level] || 'Unknown'}**.`,
           flags: [MessageFlags.Ephemeral],
         });
@@ -479,7 +479,7 @@ export default {
           replyParts.push('No options provided; nothing to change.');
         }
 
-        await interaction.reply({
+        await interaction.editReply({
           content: `${overallSuccess ? '✅' : '⚠️'} ${replyParts.join('\n')}`,
           flags: [MessageFlags.Ephemeral],
         });
@@ -488,7 +488,7 @@ export default {
         const config = await GatewayConfig.findOne({ guildId: guild.id });
 
         if (!config || !config.enabled) {
-          await interaction.reply({
+          await interaction.editReply({
             content: '❌ Gateway is not configured for this server.\n\nUse `/gateway setup` to configure it.',
             flags: [MessageFlags.Ephemeral],
           });
@@ -552,7 +552,7 @@ export default {
         embed.setFooter({ text: 'Use /gateway setup to configure methods | /gateway set_admin_log for logging' })
           .setTimestamp();
 
-        await interaction.reply({
+        await interaction.editReply({
           embeds: [embed],
           flags: [MessageFlags.Ephemeral],
         });
@@ -561,7 +561,7 @@ export default {
       console.error('[gateway command] Error:', err);
       try {
         if (interaction.isRepliable() && !interaction.replied) {
-          await interaction.reply({
+          await interaction.editReply({
             content: '❌ An error occurred while executing this command.',
             flags: [MessageFlags.Ephemeral],
           });
