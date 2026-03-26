@@ -279,7 +279,7 @@ export default function EmbedVaultModule(client) {
           if (!selectedValue) return;
 
           if (selectedValue === 'action_create') {
-            await this.openVisualEditor(interaction);
+            await this.openModularEditor(interaction);
           } else if (selectedValue === 'action_import') {
             await this.openImportModal(interaction);
           } else if (selectedValue.startsWith('action_prev:')) {

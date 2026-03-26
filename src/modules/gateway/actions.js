@@ -107,8 +107,8 @@ export async function createEmbed(config, overrideMsg = '', pageKey = '', member
       : overrideMsg;
   }
 
-  // تطبيع اللون
-  if (data?.color) {
+  // تطبيع اللون (only when string)
+  if (data && typeof data.color === 'string') {
     try { data.color = parseColor(data.color, '#2ecc71'); } catch (_e) {}
   }
 
@@ -414,8 +414,8 @@ export async function startDMVerification(member, config) {
 
     // Phase 1: Color
     const colors = ['Red', 'Green', 'Blue'];
-    const target = colors[Math.floor(Math.random() * colors.length)];
-    const shuffled = [...colors].sort(() => Math.random() - 0.5);
+    const target = colors[crypto.randomBytes(1)[0] % colors.length];
+    const shuffled = [...colors].sort(() => (crypto.randomBytes(1)[0] / 255) - 0.5);
     const row = new ActionRowBuilder().addComponents(
       shuffled.map(c =>
         new ButtonBuilder()
@@ -450,8 +450,9 @@ export async function startDMVerification(member, config) {
       return { success: false, dmClosed };
     }
 
-    // Phase 2: Numeric code – inline spaced digits
-    const code = String(Math.floor(1000 + Math.random() * 9000));
+    // Phase 2: Numeric code – inline spaced digits (secure random)
+    const secureRandom = Number(`0x${crypto.randomBytes(2).toString('hex')}`) % 9000;
+    const code = String(1000 + secureRandom).padStart(4, '0');
     const spaced = code.split('').join(' ');
     await dmChannel.send(`🔢 **Phase 2:** Your code is: **${spaced}**`);
     const passed2 = await new Promise(resolve => {
@@ -701,7 +702,7 @@ export async function sendVerificationPrompt(channel, config, method) {
     const embed = {
       title,
       description: desc,
-      color: parseColor(config.promptUI?.color, '#2ecc71'),
+      color: typeof config.promptUI?.color === 'string' ? parseColor(config.promptUI.color, '#2ecc71') : '#2ecc71',
       footer: { text: 'Alya Bot' },
     };
 

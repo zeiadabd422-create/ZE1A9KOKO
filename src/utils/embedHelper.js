@@ -121,6 +121,10 @@ export class EmbedHelper {
 
       // First check GuildConfig for assigned embedName
       const config = await GuildConfig.findOne({ guildId: guild.id });
+      if (!config) {
+        console.warn('[EmbedHelper] Welcome: missing guild config');
+        return false;
+      }
       const embedName = config?.welcome?.embedName;
       let embed = null;
       if (embedName) {
@@ -130,7 +134,7 @@ export class EmbedHelper {
 
       // Check partners array for matching invite
       if (!embed && inviteInfo?.code) {
-        const partner = config.partners.find(p => p.inviteLink.split('/').pop() === inviteInfo.code);
+        const partner = config?.partners?.find(p => p.inviteLink.split('/').pop() === inviteInfo.code);
         if (partner) {
           console.log(`[EmbedHelper] Welcome: partner found for invite "${inviteInfo.code}": ${partner.embedName}`);
           embed = await this.getEmbedByName(guild.id, partner.embedName);

@@ -38,6 +38,9 @@ export default {
 
       // ── Slash Commands ──────────────────────────────────────────────────────
       if (interaction.isChatInputCommand()) {
+        if (!interaction.deferred && !interaction.replied) {
+          await interaction.deferReply({ ephemeral: true }).catch(() => {});
+        }
         const command = client.commands.get(interaction.commandName);
         if (!command) return;
         try {
@@ -57,6 +60,9 @@ export default {
 
       // ── Buttons ─────────────────────────────────────────────────────────────
       if (interaction.isButton()) {
+        if (!interaction.customId.startsWith('embed_help_') && !interaction.deferred && !interaction.replied) {
+          await interaction.deferUpdate().catch(() => {});
+        }
         try {
           if (interaction.customId.startsWith('welcome_') && client.welcome?.handleButtonInteraction) {
             await client.welcome.handleButtonInteraction(interaction);
@@ -121,6 +127,9 @@ export default {
 
       // ── Modal Submissions ────────────────────────────────────────────────────
       if (interaction.isModalSubmit()) {
+        if (!interaction.deferred && !interaction.replied) {
+          await interaction.deferReply({ ephemeral: true }).catch(() => {});
+        }
         try {
           if (interaction.customId.startsWith('setup_partner_invite:')) {
             const parts = interaction.customId.split(':');
@@ -130,7 +139,7 @@ export default {
 
             // Validate invite link
             if (!inviteLink.startsWith('https://discord.gg/') && !inviteLink.startsWith('https://discord.com/invite/')) {
-              return interaction.reply({ content: '❌ Invalid invite link. Must start with https://discord.gg/ or https://discord.com/invite/', ephemeral: true });
+              return interaction.editReply({ content: '❌ Invalid invite link. Must start with https://discord.gg/ or https://discord.com/invite/' });
             }
 
             // Save to GuildConfig partners array
@@ -146,9 +155,8 @@ export default {
               { upsert: true, new: true }
             );
 
-            await interaction.reply({
+            await interaction.editReply({
               content: `✅ **Partner Setup Complete!**\n🎯 Embed: **${embedName}**\n🔑 Role: <@&${roleId}>\n🔗 Invite: ${inviteLink}`,
-              ephemeral: true,
             });
             return;
           }
@@ -163,8 +171,12 @@ export default {
         } catch (err) {
           console.error('[Modal Interaction] Error:', err);
           try {
-            if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-              await interaction.reply({ content: '❌ Failed to process your submission.', ephemeral: true });
+            if (interaction.isRepliable()) {
+              if (interaction.deferred || interaction.replied) {
+                await interaction.editReply({ content: '❌ Failed to process your submission.' }).catch(() => {});
+              } else {
+                await interaction.reply({ content: '❌ Failed to process your submission.', ephemeral: true });
+              }
             }
           } catch (replyErr) {
             console.error('[Modal] Failed to send error reply:', replyErr);

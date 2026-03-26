@@ -37,8 +37,8 @@ export default async function loadCommands(client) {
 
   for (const { fullPath, category } of files) {
     try {
-      // استخدام طابع زمني (Cache Busting) لضمان تحميل أحدث نسخة من الملف
-      const fileUrl = `${pathToFileURL(fullPath).href}?update=${Date.now()}`;
+      // Use static path for dynamic imports to prevent memory leaks in production
+      const fileUrl = pathToFileURL(fullPath).href;
       const mod = await import(fileUrl);
       const cmd = mod.default;
 
