@@ -681,7 +681,7 @@ export async function sendVerificationPrompt(channel, config, method) {
     // Global promptUI settings as fallback
     let title = config.promptUI?.title || '🔐 Server Verification';
     let desc  = config.promptUI?.desc  || 'Click the button below to verify your account.';
-    const image = config.promptUI?.image || '';
+    let image = config.promptUI?.image || '';
 
     // Per-Method settings MUST overwrite the global promptUI settings
     const methodInitial = config.initialMessage?.[method] || {};

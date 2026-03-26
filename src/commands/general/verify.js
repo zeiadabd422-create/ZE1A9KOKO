@@ -53,7 +53,7 @@ export default {
       console.error('[verify command] Error:', err);
       try {
         if (interaction.isRepliable() && !interaction.replied) {
-          await interaction.reply({ content: 'An error occurred while attempting verification.', ephemeral: true });
+          await interaction.editReply({ content: 'An error occurred while attempting verification.' });
         }
       } catch (e) {
         console.error('[verify command] Failed to send error reply:', e);
