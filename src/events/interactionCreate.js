@@ -189,6 +189,10 @@ export default {
             await client.embedVault.handleModalSubmit(interaction);
             return;
           }
+          if (interaction.customId.startsWith('design_') && client.commands?.get('design')?.handleModalSubmit) {
+            await client.commands.get('design').handleModalSubmit(interaction);
+            return;
+          }
         } catch (err) {
           console.error('[Modal Interaction] Error:', err);
           try {

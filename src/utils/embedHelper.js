@@ -6,7 +6,9 @@
  * This ensures single-source-of-truth for all automated message embeds
  */
 
-import { render } from '../core/embedEngine.js';
+import { EmbedBuilder } from 'discord.js';
+import { render as visualRender } from '../core/VisualEngine.js';
+import { render as legacyRender } from '../core/embedEngine.js';
 import GuildConfig from '../modules/config/GuildConfig.js';
 
 /**
@@ -96,7 +98,16 @@ export class EmbedHelper {
         return null;
       }
 
-      const rendered = render(embedData, context);
+      let rendered;
+      if (typeof embedData === 'string') {
+        rendered = await visualRender(embedData, context.member || null, context);
+      } else if (embedData && embedData.name && embedData.guildId) {
+        rendered = await visualRender(embedData.name, context.member || null, context);
+      } else {
+        const resolved = legacyRender(embedData, context);
+        rendered = new EmbedBuilder(resolved);
+      }
+
       return await channel.send({ embeds: [rendered] });
     } catch (err) {
       console.error(`[EmbedHelper] Failed to send ${label}:`, err);
@@ -154,8 +165,8 @@ export class EmbedHelper {
         console.log(`[EmbedHelper] Welcome: generic welcome embed found: ${!!embed}`);
       }
 
-      if (!embed?.data) {
-        console.log(`[EmbedHelper] Welcome: no embed data found, skipping send`);
+      if (!embed) {
+        console.log(`[EmbedHelper] Welcome: no embed found, skipping send`);
         return false;
       }
 
@@ -190,7 +201,10 @@ export class EmbedHelper {
         'server.id': guild.id,
       };
 
-      await this.sendEmbed(targetChannel, embed.data, context, `Welcome: ${member.user.tag}`);
+      const renderedWelcome = await visualRender(embed.name, member, context);
+      if (renderedWelcome && targetChannel?.isTextBased()) {
+        await targetChannel.send({ embeds: [renderedWelcome] });
+      }
 
       // Assign partner role from partners array or legacy linked role
       if (usedInviteCode) {
@@ -286,7 +300,10 @@ export class EmbedHelper {
         'server.id': guild.id,
       };
 
-      await this.sendEmbed(targetChannel, embed.data, context, `Goodbye: ${member.user?.tag || 'عضو غادرنا'}`);
+      const renderedGoodbye = await visualRender(embed.name, member, context);
+      if (renderedGoodbye && targetChannel?.isTextBased()) {
+        await targetChannel.send({ embeds: [renderedGoodbye] });
+      }
       return true;
     } catch (err) {
       console.error('[EmbedHelper] sendGoodbyeEmbed failed:', err);
@@ -339,7 +356,10 @@ export class EmbedHelper {
         'member_count': (guild.memberCount ?? 0).toString(),
       };
 
-      await this.sendEmbed(targetChannel, embed.data, context, `Boost: ${guild.name}`);
+      const renderedBoost = await visualRender(embed.name, null, context);
+      if (renderedBoost && targetChannel?.isTextBased()) {
+        await targetChannel.send({ embeds: [renderedBoost] });
+      }
       return true;
     } catch (err) {
       console.error('[EmbedHelper] sendBoostEmbed failed:', err);

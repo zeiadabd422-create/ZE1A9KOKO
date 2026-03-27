@@ -7,6 +7,7 @@ import loadCommands from './loaders/commands.js';
 import TaskScheduler from './core/TaskScheduler.js';
 import { startApi } from './api.js';
 import EmbedVault from './modules/embedVault/index.js';
+import VisualEngine from './core/VisualEngine.js';
 import { initializeEmbedHelper } from './utils/embedHelper.js';
 
 // 1. تحميل الإعدادات فوراً

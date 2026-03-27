@@ -1,4 +1,4 @@
-import EmbedVault from './schema.js';
+import EmbedVault from '../../models/EmbedVault.js';
 import EmbedManagerModule from './manager.js';
 import {
   ActionRowBuilder,
@@ -84,22 +84,26 @@ export default function EmbedVaultModule(client) {
       return EmbedVault.findOne({ guildId, linkedInviteCode: inviteCode.trim() }).lean();
     },
 
-    async upsert(guildId, name, data, type = 'Manual', metadata = {}) {
+    async upsert(guildId, name, structure, tier = 'Common', metadata = {}) {
+      const normalized = {
+        ...structure,
+        ...(structure.data || {}),
+      };
+
       return EmbedVault.findOneAndUpdate(
         { guildId, name: name.trim() },
         {
           $set: {
             guildId,
             name: name.trim(),
-            data,
-            type,
+            tier,
+            structure: normalized,
+            data: structure, // backward compatibility for old callers
+            isBlueprint: Boolean(metadata.isBlueprint || false),
+            dynamicAssets: Boolean(metadata.dynamicAssets || false),
             linkedInviteCode: metadata.linkedInviteCode ?? '',
             linkedPartnerRole: metadata.linkedPartnerRole ?? '',
-            authorName: metadata.authorName ?? '',
-            authorIcon: metadata.authorIcon ?? '',
-            footerText: metadata.footerText ?? '',
-            footerIcon: metadata.footerIcon ?? '',
-            includeTimestamp: metadata.includeTimestamp ?? false,
+            type: metadata.type ?? 'Manual',
           },
         },
         { upsert: true, new: true, setDefaultsOnInsert: true }
