@@ -1,5 +1,4 @@
 import GuildConfig from '../config/GuildConfig.js';
-import { render } from '../../core/embedEngine.js';
 import { ModalBuilder, TextInputBuilder, ActionRowBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 
 class WelcomeModule {
@@ -8,41 +7,19 @@ class WelcomeModule {
   }
 
   async buildEmbed(embedConfig, member, guild) {
-    try {
-      if (!embedConfig) return null;
-      const template = {};
-      if (embedConfig.title) template.title = embedConfig.title;
-      if (embedConfig.description) template.description = embedConfig.description;
-      if (embedConfig.color) template.color = embedConfig.color;
-      if (embedConfig.author_name) {
-        template.author = { name: embedConfig.author_name };
-        if (embedConfig.author_icon) template.author.iconURL = embedConfig.author_icon;
-      }
-      if (embedConfig.footer_text) {
-        template.footer = { text: embedConfig.footer_text };
-        if (embedConfig.footer_image_url) template.footer.iconURL = embedConfig.footer_image_url;
-      }
-      if (embedConfig.thumbnail_url) {
-        template.thumbnail = { url: embedConfig.thumbnail_url };
-      } else if (embedConfig.thumbnail_toggle && member?.user) {
-        template.thumbnail = { url: member.user.displayAvatarURL({ extension: 'png', size: 256, forceStatic: false }) };
-      }
-      if (embedConfig.image_url) template.image = { url: embedConfig.image_url };
-
-      const rendered = render(template, { member });
-      return rendered;
-    } catch (err) {
-      return null;
-    }
+    // TODO: Replace with new VisualEngine render when available
+    // For now, return a basic object structure
+    return {
+      title: embedConfig?.title || 'Welcome',
+      description: embedConfig?.description || 'Welcome to the server!',
+      color: embedConfig?.color || 0x2ecc71,
+    };
   }
 
   async handleMemberAdd(member, usedInviteCode = null) {
     try {
-      if (this.client && this.client.embedHelper && typeof this.client.embedHelper.sendWelcomeEmbed === 'function') {
-        await this.client.embedHelper.sendWelcomeEmbed(member, usedInviteCode);
-        return;
-      }
-
+      // TODO: Welcome embed will be sent by new embed engine
+      
       // Legacy fallback for manual component-based welcome flows (non-vault)
       const config = await GuildConfig.findOne({ guildId: member.guild.id });
       if (!config?.welcome?.channelId) return;
@@ -72,11 +49,8 @@ class WelcomeModule {
 
   async handleMemberRemove(member) {
     try {
-      if (this.client && this.client.embedHelper && typeof this.client.embedHelper.sendGoodbyeEmbed === 'function') {
-        await this.client.embedHelper.sendGoodbyeEmbed(member);
-        return;
-      }
-
+      // TODO: Goodbye embed will be sent by new embed engine
+      
       const config = await GuildConfig.findOne({ guildId: member.guild.id });
       if (!config?.goodbye?.channelId) return;
 

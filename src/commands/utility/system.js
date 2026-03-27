@@ -44,9 +44,17 @@ export default {
 async function showSystemDashboard(interaction) {
   const { client, guildId } = interaction;
 
-  // Get system data
-  const data = await client.embedHelper.getSystemMap(guildId);
-  const embed = new EmbedBuilder(data);
+  // TODO: Migrate to new VisualEngine
+  // For now, create a basic status embed
+  const embed = new EmbedBuilder()
+    .setTitle('🛡️ نظام الرادار الإمبراطوري • Imperial Radar System')
+    .setDescription('استعد للمحرك الجديد • Ready for new engine')
+    .setColor(0xDAA520)
+    .addFields({
+      name: 'الحالة • Status',
+      value: '⚙️ قيد التحديث • Updating...',
+      inline: false,
+    });
 
   // Create tab buttons
   const row = new ActionRowBuilder().addComponents(

@@ -1,5 +1,4 @@
 import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
-import { render } from '../../core/embedEngine.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -28,11 +27,9 @@ export default {
         });
       }
 
-      // FIX #4 – pass real member context so ALL placeholders (including avatars) resolve
-      const rendered = render(payload, { member: interaction.member });
-
-      // FIX – render() returns a plain object; discord.js v14 requires an EmbedBuilder instance
-      const embed = new EmbedBuilder(rendered);
+      // TODO: Migrate to new VisualEngine for placeholder resolution
+      // For now, use the raw payload directly
+      const embed = new EmbedBuilder(payload);
 
       return interaction.reply({ embeds: [embed], flags: [MessageFlags.Ephemeral] });
     } catch (err) {

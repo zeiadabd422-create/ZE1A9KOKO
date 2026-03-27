@@ -1,10 +1,8 @@
 /**
  * guildUpdate Event Handler
  * Monitors guild changes including boost/premium tier updates
- * Sends custom boost embeds from embedVault when boost level increases
+ * Ready for new embed engine integration
  */
-
-import { initializeEmbedHelper } from '../utils/embedHelper.js';
 
 export default {
   name: 'guildUpdate',
@@ -24,14 +22,7 @@ export default {
           `[GuildUpdate] Boost detected in ${newGuild.name}: Tier ${oldBoostLevel} -> ${newBoostLevel}, ` +
           `Boosts: ${oldGuild.premiumSubscriptionCount} -> ${newGuild.premiumSubscriptionCount}`
         );
-
-        // Use centralized embed helper to send boost embed
-        try {
-          const embedHelper = initializeEmbedHelper(client);
-          await embedHelper.sendBoostEmbed(newGuild);
-        } catch (helperErr) {
-          console.error('[GuildUpdate] EmbedHelper boost send failed:', helperErr);
-        }
+        // TODO: Boost embed will be sent by new embed engine
       }
     } catch (err) {
       console.error('[guildUpdate] Handler failed:', err);

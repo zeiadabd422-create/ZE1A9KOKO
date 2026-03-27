@@ -6,9 +6,7 @@ import loadEvents from './loaders/events.js';
 import loadCommands from './loaders/commands.js';
 import TaskScheduler from './core/TaskScheduler.js';
 import { startApi } from './api.js';
-import EmbedVault from './modules/embedVault/index.js';
 import VisualEngine from './core/VisualEngine.js';
-import { initializeEmbedHelper } from './utils/embedHelper.js';
 
 // 1. تحميل الإعدادات فوراً
 dotenv.config();
@@ -63,8 +61,6 @@ async function bootstrap() {
 
     // ب. تحميل الأنظمة (Modules & Loaders)
     await loadModules(client);
-    client.embedVault = EmbedVault(client);
-    initializeEmbedHelper(client); // Initialize embed helper after vault is ready
     await loadEvents(client);
     await loadCommands(client);
     console.log('[2/4] LOADERS: All systems loaded.');

@@ -1,17 +1,5 @@
-import { buildPages } from '../commands/utility/embedHelp.js';
 import GuildConfig from '../modules/config/GuildConfig.js';
-import { ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ButtonBuilder, ButtonStyle, MessageFlags, EmbedBuilder } from 'discord.js';
-
-const STANDARD_HEX = 0x1abc9c; // consistent embed color
-const STANDARD_FOOTER = (client) => ({ text: 'Guardian V2 · Reactive Sync', iconURL: client?.user?.displayAvatarURL?.() || null });
-
-const makeEmbed = (client, title, description) =>
-  new EmbedBuilder()
-    .setTitle(title)
-    .setDescription(description)
-    .setColor(STANDARD_HEX)
-    .setFooter(STANDARD_FOOTER(client))
-    .setTimestamp();
+import { ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 
 export default {
   name: 'interactionCreate',
@@ -32,19 +20,8 @@ export default {
           return;
         }
 
-        // Fallback for embed command if no command-level autocomplete is defined
-        if (interaction.commandName === 'embed' && client.embedVault) {
-          const focused = interaction.options.getFocused(true);
-          if (focused.name === 'name') {
-            const all = await client.embedVault.list(interaction.guildId).catch(() => []);
-            const filtered = all
-              .filter(item => item.name.toLowerCase().includes(String(focused.value).toLowerCase()))
-              .slice(0, 25)
-              .map(item => ({ name: item.name, value: item.name }));
-            return interaction.respond(filtered);
-          }
-        }
-        return;
+        // Fallback for commands with no autocomplete
+        return interaction.respond([]).catch(() => {});
       }
 
       // ── Slash Commands ──────────────────────────────────────────────────────
@@ -60,11 +37,11 @@ export default {
           console.error(`[Command: ${interaction.commandName}] Execution error:`, cmdErr);
           try {
             if (interaction.isRepliable()) {
-              const errorEmbed = makeEmbed(client, 'Command Failed', '❌ An error occurred executing the command. Please try again or contact an administrator.');
+              const errorMsg = '❌ An error occurred executing the command. Please try again or contact an administrator.';
               if (interaction.deferred || interaction.replied) {
-                await interaction.editReply({ embeds: [errorEmbed] }).catch(() => {});
+                await interaction.editReply({ content: errorMsg }).catch(() => {});
               } else {
-                await interaction.reply({ embeds: [errorEmbed], flags: [MessageFlags.Ephemeral] });
+                await interaction.reply({ content: errorMsg, flags: [MessageFlags.Ephemeral] });
               }
             }
           } catch (replyErr) {
@@ -76,39 +53,12 @@ export default {
 
       // ── Buttons ─────────────────────────────────────────────────────────────
       if (interaction.isButton()) {
-        if (!interaction.customId.startsWith('embed_help_') && !interaction.deferred && !interaction.replied) {
+        if (!interaction.deferred && !interaction.replied) {
           await interaction.deferUpdate().catch(() => {});
         }
         try {
           if (interaction.customId.startsWith('welcome_') && client.welcome?.handleButtonInteraction) {
             await client.welcome.handleButtonInteraction(interaction);
-            return;
-          }
-          if (interaction.customId.startsWith('embedvault_') && client.embedVault?.handleButtonInteraction) {
-            await client.embedVault.handleButtonInteraction(interaction);
-            return;
-          }
-          if (interaction.customId.startsWith('embed_help_')) {
-            const parts = interaction.customId.split('_');
-            const action = parts[2];
-            const currentPage = parseInt(parts[3] || 0);
-            const pages = buildPages(interaction); // Need to import or define
-            // Since it's ephemeral, and to keep simple, just show a message
-            let newPage = currentPage;
-            if (action === 'next') newPage = (currentPage + 1) % pages.length;
-            else if (action === 'prev') newPage = (currentPage - 1 + pages.length) % pages.length;
-            else if (action === 'close') {
-              await interaction.update({ content: 'Help closed.', embeds: [], components: [] });
-              return;
-            }
-            const components = [
-              new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId(`embed_help_prev_${newPage}`).setLabel('⬅️ Previous').setStyle(ButtonStyle.Secondary).setDisabled(newPage === 0),
-                new ButtonBuilder().setCustomId(`embed_help_next_${newPage}`).setLabel('Next ➡️').setStyle(ButtonStyle.Secondary).setDisabled(newPage === pages.length - 1),
-                new ButtonBuilder().setCustomId('embed_help_close').setLabel('❌ Close').setStyle(ButtonStyle.Danger)
-              )
-            ];
-            await interaction.update({ embeds: [pages[newPage]], components });
             return;
           }
           if (interaction.customId.startsWith('system_tab_')) {
@@ -126,11 +76,11 @@ export default {
           console.error('[Button Interaction] Error:', err);
           try {
             if (interaction.isRepliable()) {
-              const errorEmbed = makeEmbed(client, 'Button Interaction Failed', '❌ An error occurred processing your interaction.');
+              const errorMsg = '❌ An error occurred processing your interaction.';
               if (interaction.deferred || interaction.replied) {
-                await interaction.editReply({ embeds: [errorEmbed] }).catch(() => {});
+                await interaction.editReply({ content: errorMsg }).catch(() => {});
               } else {
-                await interaction.reply({ embeds: [errorEmbed], flags: [MessageFlags.Ephemeral] });
+                await interaction.reply({ content: errorMsg, flags: [MessageFlags.Ephemeral] });
               }
             }
           } catch (replyErr) {
@@ -185,10 +135,6 @@ export default {
             await client.welcome.handleModalSubmit(interaction);
             return;
           }
-          if (interaction.customId.startsWith('embedvault_') && client.embedVault?.handleModalSubmit) {
-            await client.embedVault.handleModalSubmit(interaction);
-            return;
-          }
           if (interaction.customId.startsWith('design_') && client.commands?.get('design')?.handleModalSubmit) {
             await client.commands.get('design').handleModalSubmit(interaction);
             return;
@@ -197,11 +143,11 @@ export default {
           console.error('[Modal Interaction] Error:', err);
           try {
             if (interaction.isRepliable()) {
-              const errorEmbed = makeEmbed(client, 'Modal Submission Failed', '❌ Failed to process your submission.');
+              const errorMsg = '❌ Failed to process your submission.';
               if (interaction.deferred || interaction.replied) {
-                await interaction.editReply({ embeds: [errorEmbed] }).catch(() => {});
+                await interaction.editReply({ content: errorMsg }).catch(() => {});
               } else {
-                await interaction.reply({ embeds: [errorEmbed], flags: [MessageFlags.Ephemeral] });
+                await interaction.reply({ content: errorMsg, flags: [MessageFlags.Ephemeral] });
               }
             }
           } catch (replyErr) {
@@ -288,10 +234,6 @@ export default {
             modal.addComponents(firstActionRow);
 
             await interaction.showModal(modal);
-            return;
-          }
-          if (interaction.customId.startsWith('embedvault_') && client.embedVault?.handleSelectMenu) {
-            await client.embedVault.handleSelectMenu(interaction);
             return;
           }
           if (client.gateway?.handleInteraction) {

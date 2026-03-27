@@ -2,7 +2,6 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import crypto from 'crypto';
 import { validateRaidShield } from './checker.js';
 import { parseColor } from '../../utils/parseColor.js';
-import { render as renderEmbed } from '../../core/embedEngine.js';
 import { BoundedMap } from '../../utils/cache.js';
 
 // ── Cache: embeds ثابتة تُخزَّن، embeds ديناميكية (ID Card) لا تُخزَّن أبداً
@@ -56,76 +55,17 @@ export function clearEmbedCache(guildId) {
 }
 
 /**
- * ابنِ embed من إعدادات الـ page مع دعم cache ذكي
- *
- * @param {Object} config       - GatewayConfig document من MongoDB
- * @param {string} overrideMsg  - نص بديل للـ description (يدعم placeholders)
- * @param {string} pageKey      - 'success' | 'alreadyVerified' | 'error' | 'dm' | 'prompt'
- * @param {GuildMember} member  - Discord GuildMember (اختياري)
+ * [DEPRECATED] oldcreateEmbed - Will be replaced by new VisualEngine
+ * Temporarily stubbed for backward compatibility during transition
  */
 export async function createEmbed(config, overrideMsg = '', pageKey = '', member = null) {
-  const gid = config.guildId || '';
-
-  // embeds الـ ID Card تحتوي بيانات خاصة بالمستخدم — لا تُخزَّن في cache أبداً
-  const isDynamic = pageKey === 'success' && overrideMsg && overrideMsg.includes('{');
-
-  // مفتاح الـ cache لا يشمل overrideMsg الخام لمنع cache poisoning
-  const cacheKey = `${gid}:${member?.id || ''}:${pageKey}`;
-
-  if (!isDynamic && embedCache.has(cacheKey)) {
-    return embedCache.get(cacheKey);
-  }
-
-  // اختر الـ template المناسبة
-  let template = null;
-  if (config.templates && Array.isArray(config.templates)) {
-    template = config.templates.find(t => t.name === pageKey);
-  }
-  if (!template) {
-    const pageMap = {
-      success:         config.successUI,
-      alreadyVerified: config.alreadyVerifiedUI,
-      error:           config.errorUI,
-      dm:              config.dmUI,
-      prompt:          config.promptUI,
-    };
-    template = pageMap[pageKey] || {};
-  }
-
-  const data = renderEmbed(template, member ? { member } : {});
-
-  if (data?.error === 'EMBED_DESCRIPTION_TOO_LONG') {
-    throw new Error('EMBED_DESCRIPTION_TOO_LONG');
-  }
-
-  // The new render function already handles placeholders, so no need for additional parsing
-
-  // حل الـ placeholders في الـ override message
-  if (overrideMsg && data) {
-    data.description = member
-      ? renderEmbed({ description: overrideMsg }, { member }).description
-      : overrideMsg;
-  }
-
-  // تطبيع اللون (only when string)
-  if (data && typeof data.color === 'string') {
-    try { data.color = parseColor(data.color, '#2ecc71'); } catch (_e) {}
-  }
-
-  // صورة الأفاتار كـ thumbnail للـ ID Card (success page فقط)
-  if (pageKey === 'success' && member?.user) {
-    const avatarURL = member.user.displayAvatarURL({ extension: 'png', size: 256, forceStatic: false });
-    if (avatarURL?.startsWith('https://')) {
-      data.thumbnail = { url: avatarURL };
-    }
-  }
-
-  // خزّن الـ embeds الثابتة فقط
-  if (!isDynamic) {
-    embedCache.set(cacheKey, data);
-  }
-
-  return data;
+  // TODO: Replace with new VisualEngine render calls
+  // For now, return a minimal embed-compatible object
+  return {
+    title: pageKey === 'success' ? '✅ Verified' : pageKey === 'error' ? '❌ Error' : 'Message',
+    description: overrideMsg || 'Please use the new embed engine.',
+    color: 0x2ecc71,
+  };
 }
 
 /**
