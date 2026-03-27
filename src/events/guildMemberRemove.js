@@ -1,3 +1,5 @@
+import Member from '../models/Member.js';
+
 export default {
   name: 'guildMemberRemove',
   async execute(member) {
@@ -11,6 +13,21 @@ export default {
         } catch (fetchErr) {
           console.warn('[GuildMemberRemove] Failed to fetch user:', fetchErr);
         }
+      }
+
+      // Mark leave in DB for next cleanup cycle
+      try {
+        await Member.findOneAndUpdate(
+          { userId: member.id, guildId: member.guild.id },
+          {
+            status: 'left',
+            leftAt: new Date(),
+            lastSeen: new Date(),
+          },
+          { upsert: true, new: true }
+        );
+      } catch (dbErr) {
+        console.error('[GuildMemberRemove] DB update error:', dbErr);
       }
 
       // Delegate to unified EmbedHelper goodbye path

@@ -1,6 +1,17 @@
 import { buildPages } from '../commands/utility/embedHelp.js';
 import GuildConfig from '../modules/config/GuildConfig.js';
-import { ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
+import { ActionRowBuilder, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ButtonBuilder, ButtonStyle, MessageFlags, EmbedBuilder } from 'discord.js';
+
+const STANDARD_HEX = 0x1abc9c; // consistent embed color
+const STANDARD_FOOTER = (client) => ({ text: 'Guardian V2 · Reactive Sync', iconURL: client?.user?.displayAvatarURL?.() || null });
+
+const makeEmbed = (client, title, description) =>
+  new EmbedBuilder()
+    .setTitle(title)
+    .setDescription(description)
+    .setColor(STANDARD_HEX)
+    .setFooter(STANDARD_FOOTER(client))
+    .setTimestamp();
 
 export default {
   name: 'interactionCreate',
@@ -49,10 +60,11 @@ export default {
           console.error(`[Command: ${interaction.commandName}] Execution error:`, cmdErr);
           try {
             if (interaction.isRepliable()) {
+              const errorEmbed = makeEmbed(client, 'Command Failed', '❌ An error occurred executing the command. Please try again or contact an administrator.');
               if (interaction.deferred || interaction.replied) {
-                await interaction.editReply({ content: '❌ An error occurred executing the command.' }).catch(() => {});
+                await interaction.editReply({ embeds: [errorEmbed] }).catch(() => {});
               } else {
-                await interaction.reply({ content: '❌ An error occurred executing the command.', flags: [MessageFlags.Ephemeral] });
+                await interaction.reply({ embeds: [errorEmbed], flags: [MessageFlags.Ephemeral] });
               }
             }
           } catch (replyErr) {
@@ -114,10 +126,11 @@ export default {
           console.error('[Button Interaction] Error:', err);
           try {
             if (interaction.isRepliable()) {
+              const errorEmbed = makeEmbed(client, 'Button Interaction Failed', '❌ An error occurred processing your interaction.');
               if (interaction.deferred || interaction.replied) {
-                await interaction.editReply({ content: '❌ An error occurred processing your interaction.' }).catch(() => {});
+                await interaction.editReply({ embeds: [errorEmbed] }).catch(() => {});
               } else {
-                await interaction.reply({ content: '❌ An error occurred processing your interaction.', flags: [MessageFlags.Ephemeral] });
+                await interaction.reply({ embeds: [errorEmbed], flags: [MessageFlags.Ephemeral] });
               }
             }
           } catch (replyErr) {
@@ -180,10 +193,11 @@ export default {
           console.error('[Modal Interaction] Error:', err);
           try {
             if (interaction.isRepliable()) {
+              const errorEmbed = makeEmbed(client, 'Modal Submission Failed', '❌ Failed to process your submission.');
               if (interaction.deferred || interaction.replied) {
-                await interaction.editReply({ content: '❌ Failed to process your submission.' }).catch(() => {});
+                await interaction.editReply({ embeds: [errorEmbed] }).catch(() => {});
               } else {
-                await interaction.reply({ content: '❌ Failed to process your submission.', flags: [MessageFlags.Ephemeral] });
+                await interaction.reply({ embeds: [errorEmbed], flags: [MessageFlags.Ephemeral] });
               }
             }
           } catch (replyErr) {

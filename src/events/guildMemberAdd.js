@@ -1,3 +1,5 @@
+import Member from '../models/Member.js';
+
 // guildMemberAdd event now delegates to the welcome module by default.
 // Older versions stored gateway settings under `modules.gateway`, which led to
 // confusion when the architecture was refactored.  We intentionally reference
@@ -17,6 +19,27 @@ export default {
           console.error('[GuildMemberAdd] inviteTracker detect error:', err);
           return null;
         });
+      }
+
+      // Upsert member record in DB (join memory)
+      try {
+        const changeHash = Member.computeChangeHash(member.user);
+        await Member.findOneAndUpdate(
+          { userId: member.id, guildId: member.guild.id },
+          {
+            userId: member.id,
+            guildId: member.guild.id,
+            lastSeen: new Date(),
+            isVerified: false,
+            changeHash,
+            status: 'active',
+            inviteCode: usedInviteCode?.code || null,
+            leftAt: null,
+          },
+          { upsert: true, new: true, setDefaultsOnInsert: true }
+        );
+      } catch (dbErr) {
+        console.error('[GuildMemberAdd] DB upsert error:', dbErr);
       }
 
       // Delegate to unified EmbedHelper welcome path

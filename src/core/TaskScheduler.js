@@ -1,10 +1,12 @@
 import mongoose from 'mongoose';
 import GatewayConfig from '../modules/gateway/schema.js';
+import Member from '../models/Member.js';
 
 export default class TaskScheduler {
   constructor(client) {
     this.client = client;
     this.isRunning = false; // حماية لمنع تداخل المهام
+    this.lastMemberSync = new Date(0);
   }
 
   start() {
@@ -36,9 +38,57 @@ export default class TaskScheduler {
   async runAllTasks() {
     // 1. فحص الرتب المؤقتة المنتهية
     await this.checkExpiredRoles();
-    
-    // 2. فحص الحظر المؤقت (سيتم إضافته لاحقاً)
+
+    // 2. فحص حالة العضو وحذف منسحبين
+    await this.checkMemberStatusAndCleanup();
+
+    // 3. فحص الحظر المؤقت (سيتم إضافته لاحقاً)
     // await this.checkExpiredBans();
+  }
+
+  async checkMemberStatusAndCleanup() {
+    try {
+      const now = new Date();
+      if (now - this.lastMemberSync < 24 * 60 * 60 * 1000) {
+        return; // only run once every 24 hours
+      }
+      this.lastMemberSync = now;
+
+      const twentyFourHoursAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+
+      for (const [guildId, guild] of this.client.guilds.cache) {
+        const memberIdsInCache = new Set(guild.members.cache.map(m => m.id));
+
+        // 1) Flag members as 'left' if they are no longer in cache
+        await Member.updateMany(
+          {
+            guildId,
+            status: { $ne: 'left' },
+            userId: { $nin: Array.from(memberIdsInCache) },
+          },
+          {
+            $set: {
+              status: 'left',
+              leftAt: now,
+              lastSeen: now,
+            },
+          }
+        );
+
+        // 2) Delete records flagged left from previous 24h
+        const deleteResult = await Member.deleteMany({
+          guildId,
+          status: 'left',
+          leftAt: { $lte: twentyFourHoursAgo },
+        });
+
+        if (deleteResult.deletedCount > 0) {
+          console.log(`[TaskScheduler] Removed ${deleteResult.deletedCount} left members from guild ${guildId}`);
+        }
+      }
+    } catch (error) {
+      console.error('[TaskScheduler] Error in checkMemberStatusAndCleanup:', error);
+    }
   }
 
   async checkExpiredRoles() {
