@@ -1,61 +1,56 @@
-import Member from '../models/Member.js';
-
-// guildMemberAdd event now delegates to the welcome module by default.
-// Older versions stored gateway settings under `modules.gateway`, which led to
-// confusion when the architecture was refactored.  We intentionally reference
-// the gateway module via `client.gateway` and, if necessary, the DB document
-// (`config.gateway`) so future changes remain consistent with the naming
-// conventions used elsewhere.
+import { EmbedBuilder } from 'discord.js';
+import { render as renderWelcomeEmbed } from '../core/VisualEngine.js';
 
 export default {
   name: 'guildMemberAdd',
   async execute(member) {
     try {
-      const { client } = member;
+      const welcomeEmbed = await renderWelcomeEmbed(
+        {
+          title: 'Welcome {user}!',
+          description: 'Glad you joined {guild}. We are {member_count} strong!',
+          color: '#00aaff',
+          footer: { text: 'Auto welcome message' },
+        },
+        member
+      );
 
-      let usedInviteCode = null;
-      if (client?.inviteTracker && typeof client.inviteTracker.detectUsedInvite === 'function') {
-        usedInviteCode = await client.inviteTracker.detectUsedInvite(member.guild).catch((err) => {
-          console.error('[GuildMemberAdd] inviteTracker detect error:', err);
-          return null;
-        });
-      }
+      const embedToSend = welcomeEmbed instanceof EmbedBuilder ? welcomeEmbed : new EmbedBuilder({
+        title: 'Welcome!',
+        description: `Hello ${member.user?.tag || 'new member'}.`,
+        color: '#00aaff',
+      });
 
-      // Upsert member record in DB (join memory)
-      try {
-        const changeHash = Member.computeChangeHash(member.user);
-        await Member.findOneAndUpdate(
-          { userId: member.id, guildId: member.guild.id },
-          {
-            userId: member.id,
-            guildId: member.guild.id,
-            lastSeen: new Date(),
-            isVerified: false,
-            changeHash,
-            status: 'active',
-            inviteCode: usedInviteCode?.code || null,
-            leftAt: null,
-          },
-          { upsert: true, new: true, setDefaultsOnInsert: true }
+      const channel =
+        member.guild.systemChannel ||
+        member.guild.channels.cache.find(
+          (c) => c.isTextBased() && c.permissionsFor(member.guild.members.me).has('SendMessages')
         );
-      } catch (dbErr) {
-        console.error('[GuildMemberAdd] DB upsert error:', dbErr);
-      }
 
-      // Delegate to unified EmbedHelper welcome path
-      if (client && client.embedHelper && typeof client.embedHelper.sendWelcomeEmbed === 'function') {
-        try {
-          console.log(`[GuildMemberAdd] New member: ${member.user?.tag || 'Unknown'} (invite: ${usedInviteCode?.code || 'unknown'})`);
-          await client.embedHelper.sendWelcomeEmbed(member, usedInviteCode);
-        } catch (err) {
-          console.error('[EmbedHelper] sendWelcomeEmbed error:', err);
-        }
+      if (!channel) {
+        console.warn('[guildMemberAdd] No available channel to send welcome message.');
         return;
       }
 
-      // otherwise nothing to do (welcome module has taken over)
+      await channel.send({ embeds: [embedToSend] });
     } catch (err) {
-      console.error('[guildMemberAdd] Handler failed:', err);
+      console.error('[guildMemberAdd] render/send failed:', err);
+      try {
+        const fallback = new EmbedBuilder()
+          .setTitle('Welcome!')
+          .setDescription(`Hello ${member.user?.tag || 'new member'}, welcome to ${member.guild?.name || 'the server'}!`)
+          .setColor('#00aaff');
+
+        const channel =
+          member.guild.systemChannel ||
+          member.guild.channels.cache.find(
+            (c) => c.isTextBased() && c.permissionsFor(member.guild.members.me).has('SendMessages')
+          );
+
+        if (channel) await channel.send({ embeds: [fallback] });
+      } catch (fallbackError) {
+        console.error('[guildMemberAdd] fallback send failed:', fallbackError);
+      }
     }
   },
 };
