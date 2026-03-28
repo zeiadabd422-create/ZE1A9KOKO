@@ -9,6 +9,7 @@ import { startApi } from './api.js';
 
 // 1. تحميل الإعدادات فوراً
 dotenv.config();
+process.env.MONGO_URI ||= process.env.MONGODB_URI;
 
 // 2. فحص النظام (System Check) - التأكد من البيانات الحيوية
 const REQUIRED_ENV = ['DISCORD_TOKEN', 'MONGO_URI', 'CLIENT_ID', 'GUILD_ID'];

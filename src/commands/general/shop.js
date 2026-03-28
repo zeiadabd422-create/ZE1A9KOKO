@@ -63,13 +63,13 @@ export default {
         timestamp: new Date(),
       };
 
-      const embed = await VisualParser.parse(embedData, {
+      const parsed = new VisualParser().parse(embedData, {
         user: interaction.user.toString(),
         guild: interaction.guild.name,
       });
 
       await interaction.editReply({
-        embeds: [embed],
+        embeds: parsed.embeds,
         components: [row],
       });
 

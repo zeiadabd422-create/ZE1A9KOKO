@@ -14,13 +14,20 @@ export default {
         return;
       }
 
-      // Handle slash commands if needed
+      // Handle slash commands by dispatching to the loaded command
       if (interaction.isChatInputCommand()) {
-        // For now, just acknowledge
-        await interaction.reply({
-          content: 'Command received!',
-          ephemeral: true,
-        });
+        const command = interaction.client?.commands?.get(interaction.commandName);
+        if (!command || typeof command.execute !== 'function') {
+          if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
+            await interaction.reply({
+              content: '❌ Command not found or is not available.',
+              ephemeral: true,
+            });
+          }
+          return;
+        }
+
+        await command.execute(interaction);
         return;
       }
 
@@ -29,10 +36,16 @@ export default {
 
       try {
         if (interaction.isRepliable() && !interaction.replied) {
-          await interaction.reply({
-            content: 'An error occurred while processing your interaction.',
-            ephemeral: true,
-          });
+          if (interaction.deferred) {
+            await interaction.editReply({
+              content: 'An error occurred while processing your interaction.',
+            });
+          } else {
+            await interaction.reply({
+              content: 'An error occurred while processing your interaction.',
+              ephemeral: true,
+            });
+          }
         }
       } catch (replyError) {
         console.error('[interactionCreate] Failed to send error reply:', replyError);

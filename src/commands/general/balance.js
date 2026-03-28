@@ -62,13 +62,13 @@ export default {
       };
 
       // Parse with VisualParser for advanced features
-      const parsedEmbed = await VisualParser.parse(embedData, {
+      const parsed = new VisualParser().parse(embedData, {
         user: interaction.user.toString(),
         guild: interaction.guild.name,
         member_count: interaction.guild.memberCount,
       });
 
-      await interaction.editReply({ embeds: [parsedEmbed] });
+      await interaction.editReply({ embeds: parsed.embeds });
 
     } catch (error) {
       console.error('[Balance Command] Error:', error);

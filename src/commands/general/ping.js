@@ -6,7 +6,7 @@ export default {
     .setDescription('اختبر اتصالك • Test your connection - Replies with Pong!'),
   async execute(interaction) {
     try {
-      await interaction.editReply({ content: '🏓 Pong!' });
+      await interaction.reply({ content: '🏓 Pong!' });
     } catch (err) {
       console.error('ping command error:', err);
     }
