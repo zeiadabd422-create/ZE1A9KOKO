@@ -1,4 +1,4 @@
-import { getRiskLevel } from './RiskEngine.js';
+import { VisualParser } from '../../core/VisualEngine/Parser.js';
 
 export class GatewayManager {
   constructor(client) {
@@ -17,22 +17,24 @@ export class GatewayManager {
         riskScore = calculateRiskScore(member);
       }
 
-      const riskLevel = getRiskLevel(riskScore);
+      const riskLevel = this.getRiskLevel(riskScore);
       const state = this.getStateFromRisk(riskLevel);
-
-      const embedData = this.getEmbedForState(state, member, riskScore);
-      const components = this.getComponentsForState(state);
-
+      const result = await this.buildGatewayResponse(member, riskScore, state);
       return {
-        embeds: [embedData],
-        components: components,
-        state: state,
-        riskScore: riskScore,
+        ...result,
+        state,
+        riskScore,
       };
     } catch (error) {
       console.error('[GatewayManager] render failed:', error);
       return this.getFallbackResponse(member);
     }
+  }
+
+  getRiskLevel(riskScore) {
+    if (riskScore < 33) return 'LOW';
+    if (riskScore < 66) return 'MEDIUM';
+    return 'HIGH';
   }
 
   getStateFromRisk(riskLevel) {
@@ -48,99 +50,82 @@ export class GatewayManager {
     }
   }
 
-  getEmbedForState(state, member, riskScore) {
-    const baseEmbed = {
-      title: `Welcome to ${member.guild.name}`,
-      description: `Hello ${member.user.username}! Please verify yourself to access the server.`,
-      color: 0x3498db,
+  async buildGatewayResponse(member, riskScore, state) {
+    const title = `Welcome to ${member.guild.name}`;
+    const baseDescription = `Hello ${member.user.username}! Please verify yourself to access the server.`;
+    const payload = {
+      title,
+      description:
+        state === this.states.EASY
+          ? `${baseDescription}\n\n**Easy Verification:** Click the button below to verify instantly.`
+          : state === this.states.NORMAL
+          ? `${baseDescription}\n\n**Normal Verification:** Solve a simple captcha or answer a question.`
+          : `${baseDescription}\n\n**Strict Verification:** Complete multiple verification steps.`,
+      color: state === this.states.EASY ? '#2ecc71' : state === this.states.NORMAL ? '#f39c12' : '#e74c3c',
       footer: { text: `Risk Score: ${riskScore}` },
       timestamp: new Date(),
+      components: [
+        {
+          type: 1,
+          components: [
+            {
+              type: 2,
+              style: state === this.states.EASY ? 'Success' : state === this.states.NORMAL ? 'Primary' : 'Danger',
+              customId:
+                state === this.states.EASY
+                  ? 'gateway_verify_easy'
+                  : state === this.states.NORMAL
+                  ? 'gateway_verify_normal'
+                  : 'gateway_verify_hard',
+              label:
+                state === this.states.EASY
+                  ? 'Verify (Easy)'
+                  : state === this.states.NORMAL
+                  ? 'Start Verification'
+                  : 'Start Strict Verification',
+            },
+          ],
+        },
+      ],
     };
 
-    switch (state) {
-      case this.states.EASY:
-        return {
-          ...baseEmbed,
-          description: `${baseEmbed.description}\n\n**Easy Verification:** Click the button below to verify instantly.`,
-          color: 0x2ecc71,
-        };
-      case this.states.NORMAL:
-        return {
-          ...baseEmbed,
-          description: `${baseEmbed.description}\n\n**Normal Verification:** Solve a simple captcha or answer a question.`,
-          color: 0xf39c12,
-        };
-      case this.states.HARD:
-        return {
-          ...baseEmbed,
-          description: `${baseEmbed.description}\n\n**Strict Verification:** Complete multiple verification steps.`,
-          color: 0xe74c3c,
-        };
-      default:
-        return baseEmbed;
-    }
+    const parser = new VisualParser();
+    return parser.parse(payload, {
+      user: `<@${member.user.id}>`,
+      guild: member.guild.name,
+      member_count: member.guild.memberCount,
+    });
   }
 
-  getComponentsForState(state) {
-    const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
+  async getFallbackResponse(member) {
+    const payload = {
+      title: 'Welcome!',
+      description: 'Please verify yourself to continue.',
+      color: '#95a5a6',
+      components: [
+        {
+          type: 1,
+          components: [
+            {
+              type: 2,
+              style: 'Primary',
+              customId: 'gateway_verify_fallback',
+              label: 'Verify',
+            },
+          ],
+        },
+      ],
+    };
 
-    const row = new ActionRowBuilder();
-
-    switch (state) {
-      case this.states.EASY:
-        row.addComponents(
-          new ButtonBuilder()
-            .setCustomId('gateway_verify_easy')
-            .setLabel('Verify (Easy)')
-            .setStyle(ButtonStyle.Success)
-        );
-        break;
-      case this.states.NORMAL:
-        row.addComponents(
-          new ButtonBuilder()
-            .setCustomId('gateway_verify_normal')
-            .setLabel('Start Verification')
-            .setStyle(ButtonStyle.Primary)
-        );
-        break;
-      case this.states.HARD:
-        row.addComponents(
-          new ButtonBuilder()
-            .setCustomId('gateway_verify_hard')
-            .setLabel('Start Strict Verification')
-            .setStyle(ButtonStyle.Danger)
-        );
-        break;
-      default:
-        row.addComponents(
-          new ButtonBuilder()
-            .setCustomId('gateway_verify_normal')
-            .setLabel('Verify')
-            .setStyle(ButtonStyle.Primary)
-        );
-    }
-
-    return [row];
-  }
-
-  getFallbackResponse(member) {
-    const { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } = require('discord.js');
-
-    const embed = new EmbedBuilder()
-      .setTitle('Welcome!')
-      .setDescription('Please verify yourself to continue.')
-      .setColor(0x95a5a6);
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId('gateway_verify_fallback')
-        .setLabel('Verify')
-        .setStyle(ButtonStyle.Primary)
-    );
+    const parser = new VisualParser();
+    const parsed = await parser.parse(payload, {
+      user: `<@${member.user.id}>`,
+      guild: member.guild.name,
+      member_count: member.guild.memberCount,
+    });
 
     return {
-      embeds: [embed],
-      components: [row],
+      ...parsed,
       state: 'fallback',
       riskScore: 0,
     };

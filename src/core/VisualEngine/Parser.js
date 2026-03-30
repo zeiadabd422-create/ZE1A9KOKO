@@ -20,10 +20,10 @@ function safeEvaluate(expression, context = {}) {
   if (typeof expression !== 'string') return expression;
   const knownValue = safeGetPath(context, expression.trim());
   if (knownValue !== undefined) return knownValue;
-  // detect simple plain path with no operators or function calls
   if (/^[a-zA-Z_$][0-9a-zA-Z_$]*(\.[a-zA-Z_$][0-9a-zA-Z_$]*)*$/.test(expression.trim())) {
     return '';
   }
+
   try {
     const sandbox = {
       ...context,
@@ -44,7 +44,6 @@ function safeEvaluate(expression, context = {}) {
       state: context.state,
       context,
     };
-    // eslint-disable-next-line no-new-func
     const fn = new Function('ctx', `with (ctx) { return (${expression}); }`);
     return fn(sandbox);
   } catch (error) {
@@ -131,17 +130,20 @@ function buildEmbed(data = {}, context = {}) {
   if (data.if !== undefined && !evaluateCondition(data.if, context)) {
     return null;
   }
+
   const embed = new EmbedBuilder();
   const title = interpolate(data.title, context);
   const description = interpolate(data.description, context);
   const url = interpolate(data.url, context);
   const timestamp = data.timestamp || data.ts || null;
   const color = data.color ? parseColor(interpolate(data.color, context)) : undefined;
+
   if (title) embed.setTitle(title);
   if (description) embed.setDescription(description);
   if (url) embed.setURL(url);
   if (timestamp) embed.setTimestamp(timestamp);
   if (color !== undefined) embed.setColor(color);
+
   if (data.author && typeof data.author === 'object') {
     const author = {
       name: interpolate(data.author.name, context) || undefined,
@@ -150,6 +152,7 @@ function buildEmbed(data = {}, context = {}) {
     };
     embed.setAuthor(author);
   }
+
   if (data.footer && typeof data.footer === 'object') {
     const footer = {
       text: interpolate(data.footer.text, context) || undefined,
@@ -157,12 +160,15 @@ function buildEmbed(data = {}, context = {}) {
     };
     embed.setFooter(footer);
   }
+
   if (data.thumbnail) {
     embed.setThumbnail(interpolate(data.thumbnail, context));
   }
+
   if (data.image) {
     embed.setImage(interpolate(data.image, context));
   }
+
   if (Array.isArray(data.fields)) {
     const fields = data.fields
       .slice(0, 25)
@@ -176,6 +182,7 @@ function buildEmbed(data = {}, context = {}) {
       embed.setFields(fields);
     }
   }
+
   return embed;
 }
 
@@ -183,12 +190,14 @@ function buildButton(def, context = {}) {
   if (def.if !== undefined && !evaluateCondition(def.if, context)) {
     return null;
   }
+
   const label = interpolate(def.label, context);
   const customId = interpolate(def.customId || def.custom_id || def.id, context);
   const url = interpolate(def.url, context);
   const emoji = def.emoji || null;
   const style = parseButtonStyle(def.style);
   const isLink = style === ButtonStyle.Link || (!!url && !customId);
+
   const button = new ButtonBuilder();
   if (label) button.setLabel(label);
   if (isLink) {
@@ -198,9 +207,11 @@ function buildButton(def, context = {}) {
     if (customId) button.setCustomId(customId);
     button.setStyle(style);
   }
+
   if (def.disabled === true) button.setDisabled(true);
   if (def.disabled === false) button.setDisabled(false);
   if (emoji) button.setEmoji(interpolate(emoji, context));
+
   return button;
 }
 
@@ -208,11 +219,13 @@ function buildSelectMenu(def, context = {}) {
   if (def.if !== undefined && !evaluateCondition(def.if, context)) {
     return null;
   }
+
   const customId = interpolate(def.customId || def.custom_id || def.id, context);
   const placeholder = interpolate(def.placeholder, context);
   const minValues = Number(def.minValues || def.min_values || 1);
   const maxValues = Number(def.maxValues || def.max_values || 1);
   const disabled = Boolean(def.disabled);
+
   const options = (def.options || def.choices || [])
     .filter((item) => item && item.value && item.label)
     .slice(0, 25)
@@ -223,6 +236,7 @@ function buildSelectMenu(def, context = {}) {
       emoji: item.emoji ? interpolate(item.emoji, context) : undefined,
       default: Boolean(item.default),
     }));
+
   const menu = new StringSelectMenuBuilder();
   if (customId) menu.setCustomId(customId);
   if (placeholder) menu.setPlaceholder(placeholder);
@@ -230,12 +244,14 @@ function buildSelectMenu(def, context = {}) {
   if (Number.isInteger(maxValues) && maxValues > 0) menu.setMaxValues(maxValues);
   if (options.length) menu.setOptions(options);
   if (disabled) menu.setDisabled(true);
+
   return menu;
 }
 
 function buildActionRows(components = [], context = {}) {
   const rows = [];
   const flatComponents = [];
+
   if (Array.isArray(components)) {
     components.forEach((item) => {
       if (item && typeof item === 'object' && (item.type === 1 || item.components)) {
@@ -246,7 +262,9 @@ function buildActionRows(components = [], context = {}) {
       }
     });
   }
+
   if (!flatComponents.length) return rows;
+
   const row = new ActionRowBuilder();
   flatComponents.forEach((component) => {
     if (!component || typeof component !== 'object') return;
@@ -265,34 +283,53 @@ function buildActionRows(components = [], context = {}) {
       row.addComponents(builtComponent);
     }
   });
+
   if (row.components.length > 0) {
     rows.push(row);
   }
   return rows;
 }
 
+function prepareContext(raw, context = {}) {
+  const normalizedContext = { ...context };
+  if (raw.variables && typeof raw.variables === 'object') {
+    Object.assign(normalizedContext, raw.variables);
+  }
+  if (raw.db && typeof raw.db === 'object') {
+    Object.assign(normalizedContext, raw.db);
+  }
+  if (normalizedContext.database && typeof normalizedContext.database === 'object') {
+    Object.assign(normalizedContext, normalizedContext.database);
+  }
+  return normalizedContext;
+}
+
 export class VisualParser {
   parse(jsonData = {}, context = {}) {
     try {
-      let raw = jsonData && typeof jsonData === 'object' ? jsonData : {};
-      // state resolution (states: { initial:..., loading:..., success:... })
-      raw = resolveState(raw, context);
+      const raw = jsonData && typeof jsonData === 'object' ? jsonData : {};
+      const runtimeContext = prepareContext(raw, context);
+      const stateResolved = resolveState(raw, runtimeContext);
+
       let embedDefs = [];
-      if (Array.isArray(raw)) {
-        embedDefs = raw;
-      } else if (Array.isArray(raw.embeds)) {
-        embedDefs = raw.embeds;
-      } else if (raw.embed || raw.data) {
-        embedDefs = [raw.embed || raw.data];
+      if (Array.isArray(stateResolved)) {
+        embedDefs = stateResolved;
+      } else if (Array.isArray(stateResolved.embeds)) {
+        embedDefs = stateResolved.embeds;
+      } else if (stateResolved.embed || stateResolved.data) {
+        embedDefs = [stateResolved.embed || stateResolved.data];
       } else {
-        embedDefs = [raw];
+        embedDefs = [stateResolved];
       }
+
       const embeds = embedDefs
         .filter((item) => item && typeof item === 'object')
-        .map((embedDef) => buildEmbed(embedDef, context))
+        .map((embedDef) => buildEmbed(embedDef, runtimeContext))
         .filter(Boolean);
-      const componentsData = raw.components || raw.actionRows || raw.actions || [];
-      const actionRows = buildActionRows(componentsData, context);
+
+      const componentsData = stateResolved.components || stateResolved.actionRows || stateResolved.actions || [];
+      const actionRows = buildActionRows(componentsData, runtimeContext);
+
       return {
         embeds,
         components: actionRows,

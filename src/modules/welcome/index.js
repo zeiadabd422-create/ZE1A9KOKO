@@ -1,45 +1,55 @@
-import GuildConfig from '../config/GuildConfig.js';
+import GuildConfigModel from '../../models/GuildConfig.js';
 import { ModalBuilder, TextInputBuilder, ActionRowBuilder, TextInputStyle, MessageFlags } from 'discord.js';
+import { VisualParser } from '../../core/VisualEngine/Parser.js';
 
 class WelcomeModule {
   constructor(client) {
     this.client = client;
+    this.parser = new VisualParser();
   }
 
-  async buildEmbed(embedConfig, member, guild) {
-    // TODO: Replace with new VisualEngine render when available
-    // For now, return a basic object structure
+  getContext(member) {
     return {
-      title: embedConfig?.title || 'Welcome',
-      description: embedConfig?.description || 'Welcome to the server!',
-      color: embedConfig?.color || 0x2ecc71,
+      user: member?.user ? `<@${member.user.id}>` : 'Unknown User',
+      guild: member?.guild?.name || 'Unknown Guild',
+      member_count: member?.guild?.memberCount ?? 0,
+      joined_at: member?.joinedAt ? member.joinedAt.toDateString() : 'Unknown',
     };
   }
 
-  async handleMemberAdd(member, usedInviteCode = null) {
+  async buildEmbed(embedConfig, member) {
+    const fallback = {
+      title: embedConfig?.title || 'Welcome',
+      description:
+        embedConfig?.description || `Welcome to ${member.guild.name}, ${member.user.username}!`,
+      color: embedConfig?.color || '#2ecc71',
+      footer:
+        embedConfig?.footer && typeof embedConfig.footer === 'string'
+          ? { text: embedConfig.footer }
+          : embedConfig?.footer || undefined,
+      image: embedConfig?.image || undefined,
+    };
+
+    const parsed = await this.parser.parse(fallback, this.getContext(member));
+    return parsed.embeds[0];
+  }
+
+  async handleMemberAdd(member) {
     try {
-      // TODO: Welcome embed will be sent by new embed engine
-      
-      // Legacy fallback for manual component-based welcome flows (non-vault)
-      const config = await GuildConfig.findOne({ guildId: member.guild.id });
+      const config = await GuildConfigModel.findOne({ guildId: member.guild.id });
       if (!config?.welcome?.channelId) return;
 
-      const channel = member.guild.channels.cache.get(config.welcome.channelId);
+      const channel = await member.guild.channels.fetch(config.welcome.channelId).catch(() => null);
       if (!channel?.isTextBased()) return;
 
-      const embed = await this.buildEmbed({
-        title: config.welcome.embedName || 'Welcome',
-        description: `Welcome to ${member.guild.name}, ${member.user.username}!`,
-        color: '#00FF00',
-      }, member, member.guild);
+      const embed = await this.buildEmbed(config.welcome, member);
       if (embed) await channel.send({ embeds: [embed] });
 
-      // Unified autoRole using GuildConfig in all cases
       const autoRoleId = config?.welcome?.autoRoleId;
       if (autoRoleId) {
         const role = member.guild.roles.cache.get(autoRoleId);
         if (role && !member.roles.cache.has(role.id)) {
-          await member.roles.add(role.id).catch(err => console.error('[WelcomeModule] Auto role assignment failed:', err));
+          await member.roles.add(role.id).catch((err) => console.error('[WelcomeModule] Auto role assignment failed:', err));
         }
       }
     } catch (err) {
@@ -49,19 +59,13 @@ class WelcomeModule {
 
   async handleMemberRemove(member) {
     try {
-      // TODO: Goodbye embed will be sent by new embed engine
-      
-      const config = await GuildConfig.findOne({ guildId: member.guild.id });
+      const config = await GuildConfigModel.findOne({ guildId: member.guild.id });
       if (!config?.goodbye?.channelId) return;
 
-      const channel = member.guild.channels.cache.get(config.goodbye.channelId);
+      const channel = await member.guild.channels.fetch(config.goodbye.channelId).catch(() => null);
       if (!channel?.isTextBased()) return;
 
-      const embed = await this.buildEmbed({
-        title: config.goodbye.embedName || 'Goodbye',
-        description: `${member.user.username} has left ${member.guild.name}.`,
-        color: '#FF0000',
-      }, member, member.guild);
+      const embed = await this.buildEmbed(config.goodbye, member);
       if (embed) await channel.send({ embeds: [embed] });
     } catch (err) {
       console.error('[WelcomeModule.handleMemberRemove]', err);
@@ -131,10 +135,7 @@ class WelcomeModule {
           .setRequired(false)
           .setValue(embedConfig.author_icon || '');
 
-        modal.addComponents(
-          new ActionRowBuilder().addComponents(nameInput),
-          new ActionRowBuilder().addComponents(iconInput)
-        );
+        modal.addComponents(new ActionRowBuilder().addComponents(nameInput), new ActionRowBuilder().addComponents(iconInput));
       } else if (section === 'footer') {
         const textInput = new TextInputBuilder()
           .setCustomId('footer_text')
@@ -149,10 +150,7 @@ class WelcomeModule {
           .setRequired(false)
           .setValue(embedConfig.footer_image_url || '');
 
-        modal.addComponents(
-          new ActionRowBuilder().addComponents(textInput),
-          new ActionRowBuilder().addComponents(iconInput)
-        );
+        modal.addComponents(new ActionRowBuilder().addComponents(textInput), new ActionRowBuilder().addComponents(iconInput));
       } else if (section === 'images') {
         const imgInput = new TextInputBuilder()
           .setCustomId('image_url')
@@ -172,7 +170,7 @@ class WelcomeModule {
 
   async setup(guildId, channelId, autoRoleId) {
     try {
-      const cfg = await GuildConfig.findOneAndUpdate(
+      const cfg = await GuildConfigModel.findOneAndUpdate(
         { guildId },
         {
           guildId,
@@ -190,7 +188,7 @@ class WelcomeModule {
 
   async setupGoodbye(guildId, channelId) {
     try {
-      const cfg = await GuildConfig.findOneAndUpdate(
+      const cfg = await GuildConfigModel.findOneAndUpdate(
         { guildId },
         { 'goodbye.channelId': channelId },
         { upsert: true, new: true, setDefaultsOnInsert: true }

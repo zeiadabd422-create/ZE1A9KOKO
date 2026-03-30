@@ -15,6 +15,14 @@ export default {
       // Save risk score to database
       await xpManager.setRiskScore(member, riskScore);
 
+      // Send welcome embed through the welcome module first, if available
+      const welcomeModule = member.client?.welcome;
+      if (welcomeModule?.handleMemberAdd) {
+        await welcomeModule.handleMemberAdd(member).catch((err) =>
+          console.error('[guildMemberAdd] Welcome module failed:', err)
+        );
+      }
+
       // Render gateway verification message
       const gatewayResponse = await gatewayManager.render(member, riskScore);
 

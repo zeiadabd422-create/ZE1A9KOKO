@@ -1,4 +1,5 @@
 import XPManager from '../modules/leveling/XPManager.js';
+import GatewayConfig from '../modules/gateway/schema.js';
 import { EmbedBuilder } from 'discord.js';
 
 const xpManager = new XPManager();
@@ -16,10 +17,25 @@ export default {
       const member = message.member;
       if (!member) return;
 
-      // Check if user is verified (has risk score saved)
+      const gatewayConfig = await GatewayConfig.findOne({ guildId: message.guild.id });
+      if (gatewayConfig?.enabled) {
+        const verifiedRoleIds = [
+          gatewayConfig.verifiedRole,
+          gatewayConfig.methods?.button?.verifiedRole,
+          gatewayConfig.methods?.trigger?.verifiedRole,
+          gatewayConfig.methods?.slash?.verifiedRole,
+        ].filter(Boolean);
+
+        const hasVerifiedRole = verifiedRoleIds.some((roleId) => member.roles.cache.has(roleId));
+        if (verifiedRoleIds.length > 0 && !hasVerifiedRole) {
+          // Member has not passed the gateway verification yet
+          return;
+        }
+      }
+
       const riskScore = await xpManager.getRiskScoreFromDB(member);
       if (riskScore === 0) {
-        // User hasn't been through gateway verification yet
+        // User hasn't been through gateway verification or database state yet
         return;
       }
 

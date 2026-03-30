@@ -1,4 +1,5 @@
-import { SlashCommandBuilder, EmbedBuilder, MessageFlags } from 'discord.js';
+import { SlashCommandBuilder, MessageFlags } from 'discord.js';
+import { VisualParser } from '../../core/VisualEngine/Parser.js';
 
 export default {
   data: new SlashCommandBuilder()
@@ -18,7 +19,6 @@ export default {
 
       try {
         payload = JSON.parse(jsonStr);
-        // Support Discord message payloads that wrap the embed in an array
         if (payload.embeds && Array.isArray(payload.embeds)) payload = payload.embeds[0];
       } catch {
         return interaction.reply({
@@ -27,11 +27,14 @@ export default {
         });
       }
 
-      // TODO: Migrate to new VisualEngine for placeholder resolution
-      // For now, use the raw payload directly
-      const embed = new EmbedBuilder(payload);
+      const parser = new VisualParser();
+      const parsed = await parser.parse(payload, {
+        user: interaction.user.tag,
+        guild: interaction.guild?.name || 'Unknown Guild',
+        member_count: interaction.guild?.memberCount || 0,
+      });
 
-      return interaction.reply({ embeds: [embed], flags: [MessageFlags.Ephemeral] });
+      return interaction.reply({ embeds: parsed.embeds, flags: [MessageFlags.Ephemeral] });
     } catch (err) {
       console.error('[COMMAND-ERROR] Preview Failed:', err);
       if (!interaction.replied && !interaction.deferred) {

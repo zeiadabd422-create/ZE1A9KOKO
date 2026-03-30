@@ -30,7 +30,13 @@ export default {
         console.error('[GuildMemberRemove] DB update error:', dbErr);
       }
 
-      // TODO: Goodbye embed will be sent by new embed engine
+      const welcomeModule = member.client?.welcome;
+      if (welcomeModule?.handleMemberRemove) {
+        await welcomeModule.handleMemberRemove(member).catch((err) =>
+          console.error('[GuildMemberRemove] Welcome module failed:', err)
+        );
+      }
+
       console.log(`[GuildMemberRemove] Member left: ${member.user?.tag || 'عضو غادرنا'}`);
     } catch (err) {
       console.error('[guildMemberRemove] Handler failed:', err);

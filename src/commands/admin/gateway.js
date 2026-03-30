@@ -205,6 +205,10 @@ export default {
     try {
       const { client, guild, options } = interaction;
 
+      if (!interaction.deferred && !interaction.replied) {
+        await interaction.deferReply({ ephemeral: true });
+      }
+
       if (!interaction.memberPermissions?.has('Administrator')) {
         await interaction.editReply({
           content: '❌ You need Administrator permissions to use this command.',

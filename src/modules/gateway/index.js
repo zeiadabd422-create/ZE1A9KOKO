@@ -46,17 +46,14 @@ export default function GatewayModule(client) {
             if (message.deletable) await message.delete().catch(() => {});
             return;
           } else if (lockdownResult.lockdown === 3) {
-            // system closed, inform user
             if (message.channel && message.channel.send) {
               await message.channel.send(lockdownResult.message);
             }
             if (message.deletable) await message.delete().catch(() => {});
             return;
-          } else {
-            // level 0 or undefined -> result is a verifyMember-style object
           }
         }
-        const result = lockdownResult && !lockdownResult.lockdown ? lockdownResult : await verifyMember(message.member, config, 'trigger');
+        const result = await verifyMember(message.member, config, 'trigger');
         if (result.processing) return;
 
         if (result.alreadyVerified) {
@@ -168,7 +165,7 @@ export default function GatewayModule(client) {
             return;
           }
         }
-        const result = lockdownResult && !lockdownResult.lockdown ? lockdownResult : await verifyMember(interaction.member, config, method);
+        const result = await verifyMember(interaction.member, config, method);
         if (result.processing) {
           if (interaction.isRepliable()) {
             await interaction.followUp({ content: '⏳ Please wait...', flags: [MessageFlags.Ephemeral] }).catch(() => {});
@@ -182,26 +179,6 @@ export default function GatewayModule(client) {
         }
 
         if (result.success) {
-          const loadingEmbed = await createEmbed(config, '🔄 Processing...', 'success', interaction.member);
-          await interaction.editReply({ embeds: [loadingEmbed] });
-          await new Promise(r => setTimeout(r, 2000));
-          const idCardEmbed = await createEmbed(config, DEFAULT_ID_CARD, 'success', interaction.member);
-          await interaction.channel.send({ embeds: [idCardEmbed] });
-
-          // Auto-Stick: Delete old prompt and re-send
-          if (config.methods?.[method]?.promptMessageId) {
-            try {
-              const channel = interaction.channel;
-              const oldMsg = await channel.messages.fetch(config.methods[method].promptMessageId).catch(() => null);
-              if (oldMsg && oldMsg.deletable) await oldMsg.delete().catch(() => {});
-            } catch (_e) {}
-            const newPrompt = await sendVerificationPrompt(interaction.channel, config, method);
-            if (newPrompt.success && newPrompt.message?.id) {
-              config.methods[method].promptMessageId = newPrompt.message.id;
-              await config.save();
-            }
-          }
-
           return;
         }
 

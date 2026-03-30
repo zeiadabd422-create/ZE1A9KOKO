@@ -31,9 +31,8 @@ export default {
         }
       }
 
-      const result = lockdownResult && !lockdownResult.lockdown ? lockdownResult : await verifyMember(member, config, 'slash');
-      if (result.processing)
-        return interaction.editReply({ content: '⏳ Please wait...' });
+      const result = await verifyMember(member, config, 'slash');
+      if (result.processing) return interaction.editReply({ content: '⏳ Please wait...' });
 
       if (result.alreadyVerified) {
         const embed = await createEmbed(config, result.message, 'alreadyVerified', member);

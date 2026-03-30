@@ -4,10 +4,9 @@ import {
   TextInputBuilder,
   TextInputStyle,
   ActionRowBuilder,
-  EmbedBuilder,
   MessageFlags,
 } from 'discord.js';
-import { render as renderEmbed } from '../core/VisualEngine.js';
+import { VisualParser } from '../core/VisualEngine/Parser.js';
 
 export default {
   skipDefer: true,
@@ -67,8 +66,14 @@ export default {
           footer: { text: 'Design preview mode' },
         };
 
-        const embed = renderEmbed(previewStructure, interaction.member);
-        await interaction.reply({ embeds: [embed], flags: [MessageFlags.Ephemeral] });
+        const parser = new VisualParser();
+        const parsed = await parser.parse(previewStructure, {
+          user: interaction.user.tag,
+          guild: interaction.guild?.name || 'Unknown Guild',
+          member_count: interaction.guild?.memberCount || 0,
+        });
+
+        await interaction.reply({ embeds: parsed.embeds, flags: [MessageFlags.Ephemeral] });
         return;
       }
 

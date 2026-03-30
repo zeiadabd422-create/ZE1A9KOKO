@@ -21,6 +21,25 @@ const GuildConfigSchema = new mongoose.Schema({
     verifiedRoleId: { type: String, default: null }
   },
 
+  welcome: {
+    channelId: { type: String, default: null },
+    autoRoleId: { type: String, default: null },
+    title: { type: String, default: 'Welcome' },
+    description: { type: String, default: 'Welcome to the server!' },
+    color: { type: String, default: '#2ecc71' },
+    image: { type: String, default: null },
+    footer: { type: String, default: null },
+  },
+
+  goodbye: {
+    channelId: { type: String, default: null },
+    title: { type: String, default: 'Goodbye' },
+    description: { type: String, default: 'Goodbye and good luck!', },
+    color: { type: String, default: '#ff0000' },
+    image: { type: String, default: null },
+    footer: { type: String, default: null },
+  },
+
   // Economy System Configuration
   economy: {
     enabled: { type: Boolean, default: true },
