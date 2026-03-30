@@ -1,183 +1,211 @@
-const MODE_CONFIG = {
-  EASY: { timeoutMs: 240_000, retries: 3 },
-  NORMAL: { timeoutMs: 120_000, retries: 2 },
-  HARD: { timeoutMs: 90_000, retries: 1 },
-};
+import SessionManager from '../../core/SessionManager.js';
 
 const ALLOWED_MODES = ['EASY', 'NORMAL', 'HARD'];
+const DEFAULT_STEP_LIST = ['BUTTON_STEP', 'TEXT_CHALLENGE', 'EMOJI_CHALLENGE'];
+const TEXT_WORDS = ['guardian', 'secure', 'verify', 'shield', 'signal', 'human'];
+const EMOJI_OPTIONS = [
+  { label: 'Shield', emoji: '🛡️', value: 'shield' },
+  { label: 'Lock', emoji: '🔒', value: 'lock' },
+  { label: 'Sparkle', emoji: '✨', value: 'sparkle' },
+  { label: 'Check', emoji: '✅', value: 'check' },
+];
 
-function shuffleArray(items) {
+function shuffleArray(items = []) {
   return items.slice().sort(() => Math.random() - 0.5);
 }
 
-function buildAnswerButton(value) {
-  return {
-    label: String(value),
-    customId: `gateway_v3_answer_${value}`,
-    style: 'primary',
-  };
+function normalizeMode(mode) {
+  if (!mode || typeof mode !== 'string') return 'NORMAL';
+  const normalized = mode.trim().toUpperCase();
+  return ALLOWED_MODES.includes(normalized) ? normalized : 'NORMAL';
+}
+
+function buildSafeCustomId(parts = []) {
+  return ['gateway_v4', ...parts].map((part) => String(part).replace(/\s+/g, '_')).join('_');
 }
 
 export default class VerificationFlow {
   constructor(client) {
     this.client = client;
-    this.activeFlows = new Map();
-  }
-
-  cleanupExpired() {
-    const now = Date.now();
-    for (const [memberId, flow] of this.activeFlows.entries()) {
-      if (flow.timeoutAt <= now) {
-        this.activeFlows.delete(memberId);
-      }
-    }
-  }
-
-  createFlow(member, risk, config = {}, overrideMode = null, persist = true) {
-    this.cleanupExpired();
-
-    const effectiveMode = overrideMode
-      ? overrideMode.toUpperCase()
-      : risk.level === 'HIGH'
-      ? 'HARD'
-      : risk.level === 'MEDIUM'
-      ? 'NORMAL'
-      : 'EASY';
-
-    const mode = ALLOWED_MODES.includes(effectiveMode) ? effectiveMode : 'EASY';
-    const rule = config?.verification?.[mode.toLowerCase()] || MODE_CONFIG[mode];
-    const challenge = this.generateChallenge(mode);
-    const flow = {
-      memberId: member.id,
-      guildId: member.guild.id,
-      mode,
-      attemptsLeft: rule.retries,
-      timeoutAt: Date.now() + rule.timeoutMs,
-      startedAt: Date.now(),
-      challenge,
-      risk,
-      config,
-      status: 'pending',
-    };
-
-    if (persist) {
-      this.activeFlows.set(member.id, flow);
-    }
-    return flow;
+    this.sessionManager = new SessionManager();
   }
 
   getFlow(memberId) {
-    this.cleanupExpired();
-    return this.activeFlows.get(memberId) || null;
+    return this.sessionManager.getSession(memberId);
   }
 
-  generateChallenge(mode) {
-    if (mode === 'EASY') {
+  createFlow(member, risk, config = {}, overrideMode = null, persist = true) {
+    const mode = normalizeMode(overrideMode || config.defaultMode || 'EASY');
+    const modeConfig = config?.verification?.[mode.toLowerCase()] || {};
+    const timeoutMs = Number(modeConfig.timeoutSeconds ?? modeConfig.timeoutMs ?? (mode === 'HARD' ? 90_000 : mode === 'NORMAL' ? 120_000 : 240_000));
+    const maxAttempts = Number(modeConfig.retries ?? (mode === 'HARD' ? 3 : 3));
+    const steps = mode === 'HARD' ? shuffleArray(DEFAULT_STEP_LIST) : DEFAULT_STEP_LIST.slice(0, mode === 'NORMAL' ? 2 : 1);
+
+    const session = this.sessionManager.createSession(member.id, mode, {
+      timeoutMs,
+      maxAttempts,
+      steps,
+      persist,
+      initialData: {
+        guildId: member.guild.id,
+        memberId: member.id,
+        risk,
+        config,
+      },
+    });
+
+    const currentStepData = this.createStepData(session.currentStep);
+    if (persist === false) {
       return {
-        prompt: 'Press the verification button to prove you are a human visitor.',
-        expected: 'confirm',
-        options: [
-          {
-            label: 'Confirm Human',
-            customId: 'gateway_v3_easy_confirm',
-            style: 'success',
-          },
-        ],
+        ...session,
+        currentStepData,
+        attemptsLeft: maxAttempts,
       };
     }
 
-    const first = Math.floor(Math.random() * 8) + 2;
-    const second = Math.floor(Math.random() * 8) + 2;
-    const answer = first + second;
-    const choices = shuffleArray([answer, answer + 1, answer - 1]).slice(0, 3);
-
-    return {
-      prompt: `Solve this challenge to continue: **${first} + ${second} = ?**`,
-      expected: String(answer),
-      options: choices.map(buildAnswerButton),
-    };
+    return this.sessionManager.updateSession(member.id, {
+      currentStepData,
+      attemptsLeft: maxAttempts,
+    });
   }
 
-  validateResponse(memberId, rawAnswer) {
-    const flow = this.getFlow(memberId);
-    if (!flow) return { status: 'missing' };
+  createStepData(step) {
+    switch (step) {
+      case 'TEXT_CHALLENGE': {
+        const correct = TEXT_WORDS[Math.floor(Math.random() * TEXT_WORDS.length)];
+        const options = shuffleArray(
+          TEXT_WORDS.map((word) => ({ label: word, value: word }))
+        ).slice(0, 4);
+
+        return {
+          step,
+          prompt: `Choose the correct textual answer: **${correct}**`,
+          expectedAnswer: correct,
+          components: [
+            {
+              type: 'select',
+              customId: buildSafeCustomId([step]),
+              placeholder: 'Select the right text answer',
+              options,
+            },
+          ],
+        };
+      }
+      case 'EMOJI_CHALLENGE': {
+        const options = shuffleArray(EMOJI_OPTIONS).slice(0, 4);
+        const target = options[0];
+        return {
+          step,
+          prompt: `Click the emoji that matches the word **${target.label.toLowerCase()}**.`,
+          expectedAnswer: target.value,
+          components: options.map((option) => ({
+            type: 'button',
+            label: option.label,
+            emoji: option.emoji,
+            customId: buildSafeCustomId([step, option.value]),
+            style: 'secondary',
+          })),
+        };
+      }
+      case 'BUTTON_STEP':
+      default:
+        return {
+          step: 'BUTTON_STEP',
+          prompt: 'Press the button that proves you are human.',
+          expectedAnswer: 'confirm',
+          components: [
+            {
+              type: 'button',
+              label: 'Confirm Human',
+              customId: buildSafeCustomId(['BUTTON_STEP', 'confirm']),
+              style: 'success',
+            },
+          ],
+        };
+    }
+  }
+
+  extractAnswer(interaction) {
+    if (interaction.isButton()) {
+      const customId = interaction.customId || '';
+      const parts = customId.replace(/^gateway_v4_/, '').split('_');
+      const step = parts[0];
+      const answer = parts.slice(1).join('_');
+      return { step, answer };
+    }
+
+    if (interaction.isStringSelectMenu()) {
+      const customId = interaction.customId || '';
+      const parts = customId.replace(/^gateway_v4_/, '').split('_');
+      const step = parts[0];
+      const answer = interaction.values?.[0] || '';
+      return { step, answer };
+    }
+
+    return { step: null, answer: null };
+  }
+
+  processInteraction(interaction) {
+    const session = this.getFlow(interaction.member.id);
+    if (!session) return { status: 'missing' };
 
     const now = Date.now();
-    if (flow.timeoutAt <= now) {
-      this.activeFlows.delete(memberId);
-      return { status: 'timeout', flow };
+    if (session.expiresAt <= now) {
+      this.sessionManager.deleteSession(session.userId);
+      return { status: 'timeout', session };
     }
 
-    const answer = String(rawAnswer || '').trim().toLowerCase();
-    const expected = String(flow.challenge.expected || '').trim().toLowerCase();
-
-    if (answer === expected) {
-      this.activeFlows.delete(memberId);
-      return { status: 'success', flow };
+    const { step, answer } = this.extractAnswer(interaction);
+    if (!step || !answer) {
+      return { status: 'missing', session };
     }
 
-    flow.attemptsLeft -= 1;
-
-    if (flow.attemptsLeft <= 0) {
-      this.activeFlows.delete(memberId);
-      return { status: 'failed', flow };
+    if (step !== session.currentStep) {
+      return { status: 'retry', session };
     }
 
-    this.activeFlows.set(memberId, flow);
-    return { status: 'retry', flow };
+    const normalizedAnswer = String(answer).trim().toLowerCase();
+    const expectedAnswer = String(session.currentStepData.expectedAnswer).trim().toLowerCase();
+
+    if (normalizedAnswer === expectedAnswer) {
+      return this.advanceStep(session);
+    }
+
+    const remainingAttempts = Math.max(0, session.attemptsLeft - 1);
+    if (remainingAttempts <= 0) {
+      session.status = 'failed';
+      session.failureReason = `Exhausted attempts for ${session.currentStep}.`;
+      this.sessionManager.deleteSession(session.userId);
+      return { status: 'failed', session };
+    }
+
+    this.sessionManager.updateSession(session.userId, {
+      attemptsLeft: remainingAttempts,
+    });
+
+    return { status: 'retry', session: this.getFlow(session.userId) };
   }
 
-  buildPromptPayload(flow, member) {
-    return {
-      embeds: [
-        {
-          title: 'Guardian Gateway Verification',
-          description: 'Welcome **{user.username}**! Complete this verification to unlock server access.',
-          color: '{risk.color}',
-          fields: [
-            { name: 'Mode', value: '{flow.mode}', inline: true },
-            { name: 'Risk Level', value: '{risk.level}', inline: true },
-            { name: 'Attempts Remaining', value: '{flow.attemptsLeft}', inline: true },
-            { name: 'Challenge', value: '{flow.challenge.prompt}', inline: false },
-          ],
-          footer: { text: 'This flow will expire automatically if not completed in time.' },
-        },
-      ],
-      components: flow.challenge.options,
-    };
-  }
+  advanceStep(session) {
+    const nextIndex = session.stepIndex + 1;
+    if (nextIndex >= session.steps.length) {
+      session.status = 'success';
+      session.completedAt = Date.now();
+      this.sessionManager.deleteSession(session.userId);
+      return { status: 'success', session };
+    }
 
-  buildStatusPayload(flow, status) {
-    const messages = {
-      success: '✅ Verification complete. Welcome to the server.',
-      failed: '❌ Verification failed. You have exhausted all allowed attempts.',
-      timeout: '⌛ Verification timed out. Please rejoin or contact a moderator to retry.',
-      missing: '⚠️ No active verification session found. Please rejoin the verification flow.',
-    };
+    const nextStep = session.steps[nextIndex];
+    const nextStepData = this.createStepData(nextStep);
+    const updated = this.sessionManager.updateSession(session.userId, {
+      stepIndex: nextIndex,
+      currentStep: nextStep,
+      currentStepData: nextStepData,
+      attemptsLeft: session.maxAttempts,
+      expiresAt: Date.now() + session.timeoutMs,
+      status: 'pending',
+    });
 
-    const colorMap = {
-      success: '#2ecc71',
-      failed: '#e74c3c',
-      timeout: '#f39c12',
-      missing: '#7f8c8d',
-    };
-
-    return {
-      embeds: [
-        {
-          title: 'Guardian Gateway',
-          description: messages[status] || messages.missing,
-          color: colorMap[status] || '#95a5a6',
-          fields: flow
-            ? [
-                { name: 'Mode', value: flow.mode, inline: true },
-                { name: 'Risk', value: flow.risk.level, inline: true },
-                { name: 'Remaining Attempts', value: String(flow.attemptsLeft ?? 0), inline: true },
-              ]
-            : [],
-        },
-      ],
-      components: [],
-    };
+    return { status: 'advance', session: updated };
   }
 }
