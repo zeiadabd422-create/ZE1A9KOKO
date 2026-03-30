@@ -43,7 +43,7 @@ export default function GatewayModule(client) {
     if (!config.enabled) return;
 
     const antiRaidData = antiRaidMonitor.trackJoin(member);
-    const risk = evaluateRisk(member, antiRaidData.adjustment);
+    const risk = evaluateRisk(member, antiRaidData.adjustment, config.riskThresholds);
     await xpManager.setRiskScore(member, risk.score).catch(() => {});
 
     const flow = verificationFlow.createFlow(member, risk, config);
@@ -59,6 +59,33 @@ export default function GatewayModule(client) {
         await sendRichMessage(fallbackChannel, payload, context).catch(() => {});
       }
     }
+  }
+
+  async function saveVisualTemplate(guildId, templateType, templatePayload) {
+    const config = await loadConfig(guildId);
+    if (!config.visualTemplates) config.visualTemplates = {};
+    config.visualTemplates[templateType] = templatePayload;
+    await config.save();
+    return config;
+  }
+
+  async function getVisualTemplate(guildId, templateType) {
+    const config = await loadConfig(guildId);
+    return config.visualTemplates?.[templateType] || null;
+  }
+
+  async function simulateFlow(interaction, overrideMode = null, adjustment = 0) {
+    const member = interaction.member;
+    if (!member || !interaction.guild) {
+      throw new Error('Unable to resolve guild member for simulation.');
+    }
+
+    const config = await loadConfig(interaction.guild.id);
+    const risk = evaluateRisk(member, adjustment, config.riskThresholds);
+    const flow = verificationFlow.createFlow(member, risk, config, overrideMode, false);
+    const payload = verificationFlow.buildPromptPayload(flow, member);
+
+    return { flow, payload, risk, config };
   }
 
   async function handleButtonInteraction(interaction) {
@@ -120,5 +147,9 @@ export default function GatewayModule(client) {
     handleMemberAdd,
     handleButtonInteraction,
     observeMessage,
+    loadConfig,
+    saveVisualTemplate,
+    getVisualTemplate,
+    simulateFlow,
   };
 }

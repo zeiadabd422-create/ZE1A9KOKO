@@ -14,6 +14,11 @@ const GatewaySchema = new mongoose.Schema(
       spamThreshold: { type: Number, default: 5 },
       logChannel: { type: String, default: '' },
     },
+    defaultMode: { type: String, enum: ['EASY', 'NORMAL', 'HARD'], default: 'EASY' },
+    riskThresholds: {
+      lowToMedium: { type: Number, default: 34 },
+      mediumToHigh: { type: Number, default: 67 },
+    },
     verification: {
       easy: {
         enabled: { type: Boolean, default: true },
@@ -30,6 +35,10 @@ const GatewaySchema = new mongoose.Schema(
         timeoutSeconds: { type: Number, default: 90 },
         retries: { type: Number, default: 1 },
       },
+    },
+    visualTemplates: {
+      welcome: { type: Object, default: {} },
+      verification: { type: Object, default: {} },
     },
   },
   { timestamps: true }

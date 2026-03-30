@@ -18,6 +18,14 @@ export default {
         return;
       }
 
+      if (interaction.isAutocomplete()) {
+        const command = interaction.client?.commands?.get(interaction.commandName);
+        if (command?.autocomplete) {
+          await command.autocomplete(interaction);
+        }
+        return;
+      }
+
       if (interaction.isChatInputCommand()) {
         const command = interaction.client?.commands?.get(interaction.commandName);
         if (!command || typeof command.execute !== 'function') {

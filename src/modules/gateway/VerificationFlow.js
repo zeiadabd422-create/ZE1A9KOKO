@@ -4,6 +4,8 @@ const MODE_CONFIG = {
   HARD: { timeoutMs: 90_000, retries: 1 },
 };
 
+const ALLOWED_MODES = ['EASY', 'NORMAL', 'HARD'];
+
 function shuffleArray(items) {
   return items.slice().sort(() => Math.random() - 0.5);
 }
@@ -31,10 +33,18 @@ export default class VerificationFlow {
     }
   }
 
-  createFlow(member, risk, config = {}) {
+  createFlow(member, risk, config = {}, overrideMode = null, persist = true) {
     this.cleanupExpired();
 
-    const mode = risk.level === 'HIGH' ? 'HARD' : risk.level === 'MEDIUM' ? 'NORMAL' : 'EASY';
+    const effectiveMode = overrideMode
+      ? overrideMode.toUpperCase()
+      : risk.level === 'HIGH'
+      ? 'HARD'
+      : risk.level === 'MEDIUM'
+      ? 'NORMAL'
+      : 'EASY';
+
+    const mode = ALLOWED_MODES.includes(effectiveMode) ? effectiveMode : 'EASY';
     const rule = config?.verification?.[mode.toLowerCase()] || MODE_CONFIG[mode];
     const challenge = this.generateChallenge(mode);
     const flow = {
@@ -50,7 +60,9 @@ export default class VerificationFlow {
       status: 'pending',
     };
 
-    this.activeFlows.set(member.id, flow);
+    if (persist) {
+      this.activeFlows.set(member.id, flow);
+    }
     return flow;
   }
 
