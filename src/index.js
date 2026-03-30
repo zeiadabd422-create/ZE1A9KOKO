@@ -53,7 +53,7 @@ client.commands = new Collection();
 // 5. وظيفة الإقلاع الاحترافية (Bootstrap Sequence)
 async function bootstrap() {
   try {
-    console.log('--- [GUARDIAN V2 BOOT SEQUENCE] ---');
+    console.log('--- [GUARDIAN V3 BOOT SEQUENCE] ---');
 
     // أ. الربط مع قاعدة البيانات
     await connectDatabase();
