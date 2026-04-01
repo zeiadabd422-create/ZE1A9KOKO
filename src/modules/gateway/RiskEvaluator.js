@@ -1,5 +1,6 @@
 const joinHistory = new Map();
 const behaviorHistory = new Map();
+const trustState = new Map();
 
 const DEFAULT_THRESHOLDS = { easy: 30, normal: 70 };
 
@@ -14,9 +15,10 @@ function clampScore(value) {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
-function buildBehaviorKey(member) {
-  const guildId = member.guild?.id || 'unknown';
-  return `${guildId}:${member.id}`;
+function buildBehaviorKey(source = {}) {
+  const userId = source.userId || source.member?.id || 'unknown';
+  const guildId = source.guildId || source.member?.guild?.id || source.member?.guildId || 'unknown';
+  return `${guildId}:${userId}`;
 }
 
 export function getRiskLevel(score, thresholds = DEFAULT_THRESHOLDS) {
@@ -38,8 +40,28 @@ export function getRiskColor(level) {
   }
 }
 
+export function getTrustScore(source = {}) {
+  const key = buildBehaviorKey(source);
+  return trustState.get(key)?.score ?? 50;
+}
+
+export function getTrustLevel(source = {}) {
+  const score = getTrustScore(source);
+  if (score < 35) return 'LOW';
+  if (score < 65) return 'MEDIUM';
+  return 'HIGH';
+}
+
+export function updateTrust(source = {}, delta = 0) {
+  const key = buildBehaviorKey(source);
+  const previous = trustState.get(key)?.score ?? 50;
+  const next = clampScore(previous + Number(delta));
+  trustState.set(key, { score: next, updatedAt: Date.now() });
+  return next;
+}
+
 export function recordJoin(member) {
-  const key = buildBehaviorKey(member);
+  const key = buildBehaviorKey({ member });
   const now = Date.now();
   const recent = (joinHistory.get(key) || []).filter((ts) => ts > now - 300_000);
   const lastJoin = recent[recent.length - 1] || null;
@@ -57,11 +79,15 @@ export function recordJoin(member) {
     result.reasons.push('Rapid rejoin detected after leaving the server.');
   }
 
+  if (result.adjustment > 0) {
+    updateTrust({ member }, -Math.min(result.adjustment, 20));
+  }
+
   return result;
 }
 
 export function observeBehavior(member, eventType = 'message') {
-  const key = buildBehaviorKey(member);
+  const key = buildBehaviorKey({ member });
   const now = Date.now();
   const entry = behaviorHistory.get(key) || { messages: [], interactions: [], signals: {} };
   const config = { messageWindowMs: 30_000, interactionWindowMs: 15_000, interactionThreshold: 4 };
@@ -95,6 +121,12 @@ export function observeBehavior(member, eventType = 'message') {
   }
 
   behaviorHistory.set(key, entry);
+  if (adjustment > 0) {
+    updateTrust({ member }, -Math.min(adjustment, 20));
+  } else if (eventType === 'message') {
+    updateTrust({ member }, 1);
+  }
+
   return { adjustment, reason, signals: entry.signals };
 }
 
@@ -148,7 +180,7 @@ export function evaluateRisk(member, options = {}) {
     reasons.push('Custom adjustment applied to the risk score.');
   }
 
-  const key = buildBehaviorKey(member);
+  const key = buildBehaviorKey({ member });
   const behavior = behaviorHistory.get(key);
   if (behavior?.signals?.quickFirstMessage) {
     score += 10;
@@ -157,6 +189,15 @@ export function evaluateRisk(member, options = {}) {
   if (behavior?.signals?.rapidInteractionSpam) {
     score += 14;
     reasons.push('Rapid interaction behavior detected.');
+  }
+
+  const trust = getTrustScore({ member });
+  if (trust < 35) {
+    score += 12;
+    reasons.push('Low trust score increased the risk score.');
+  } else if (trust >= 70) {
+    score -= 8;
+    reasons.push('High trust score reduced the risk score.');
   }
 
   score = clampScore(score);
@@ -174,6 +215,30 @@ export function evaluateRisk(member, options = {}) {
       bot: Boolean(member.user?.bot),
       thresholds,
       behaviorSignals: behavior?.signals || {},
+      trustScore: trust,
+      trustLevel: getTrustLevel({ member }),
     },
+  };
+}
+
+export function updateRisk(member, options = {}) {
+  const behavior = options.eventType ? observeBehavior(member, options.eventType) : { adjustment: 0, signals: {} };
+  const baseOptions = {
+    ...options,
+    adjustment: Number(options.adjustment || 0) + behavior.adjustment,
+    reasons: [...(options.reasons || []), ...(behavior.reason ? [behavior.reason] : [])],
+  };
+  const risk = evaluateRisk(member, baseOptions);
+  const trustScore = getTrustScore({ member });
+
+  if (baseOptions.adjustment <= 0 && options.eventType === 'message') {
+    updateTrust({ member }, 1);
+  }
+
+  return {
+    risk,
+    trustScore,
+    trustLevel: getTrustLevel({ member }),
+    behaviorSignals: behavior.signals,
   };
 }

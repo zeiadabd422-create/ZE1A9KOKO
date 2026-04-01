@@ -15,7 +15,7 @@ const GatewaySchema = new mongoose.Schema(
       logChannel: { type: String, default: '' },
       dashboardMessageId: { type: String, default: '' },
     },
-    defaultMode: { type: String, enum: ['EASY', 'NORMAL', 'HARD'], default: 'EASY' },
+    defaultMode: { type: String, enum: ['EASY', 'NORMAL', 'HARD', 'HARD++'], default: 'EASY' },
     riskThresholds: {
       lowToMedium: { type: Number, default: 34 },
       mediumToHigh: { type: Number, default: 67 },
@@ -38,6 +38,12 @@ const GatewaySchema = new mongoose.Schema(
         timeoutSeconds: { type: Number, default: 90 },
         retries: { type: Number, default: 1 },
         kickOnFailure: { type: Boolean, default: false },
+      },
+      'hard++': {
+        enabled: { type: Boolean, default: true },
+        timeoutSeconds: { type: Number, default: 60 },
+        retries: { type: Number, default: 1 },
+        kickOnFailure: { type: Boolean, default: true },
       },
     },
     visualTemplates: {

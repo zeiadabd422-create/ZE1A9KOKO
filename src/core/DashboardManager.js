@@ -1,4 +1,4 @@
-import { EmbedBuilder } from 'discord.js';
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 
 export default class DashboardManager {
   constructor(client, sessionManager, antiRaidMonitor, gateway) {
@@ -9,6 +9,7 @@ export default class DashboardManager {
     this.failedAttempts = new Map();
     this.trackedGuilds = new Set();
     this.lastPayloadHash = new Map();
+    this.maxTrackedGuilds = 50;
     this.intervalMs = 8_000;
     this.interval = setInterval(() => this.syncDashboards(), this.intervalMs);
     if (typeof this.interval.unref === 'function') {
@@ -18,6 +19,11 @@ export default class DashboardManager {
 
   trackGuild(guildId) {
     if (!guildId) return;
+    if (this.trackedGuilds.has(guildId)) return;
+    if (this.trackedGuilds.size >= this.maxTrackedGuilds) {
+      const oldest = this.trackedGuilds.values().next().value;
+      this.trackedGuilds.delete(oldest);
+    }
     this.trackedGuilds.add(guildId);
   }
 
@@ -87,18 +93,54 @@ export default class DashboardManager {
     const failedAttempts = this.failedAttempts.get(guildId) || 0;
     const raidState = this.antiRaidMonitor.getRaidStatus(guildId);
     const isRaid = raidState.active;
+
     const embed = new EmbedBuilder()
       .setTitle('Guardian Gateway Live Dashboard')
       .setDescription('Real-time verification and raid protection status for this server.')
       .addFields(
         { name: 'Active Verifications', value: String(activeVerifications), inline: true },
         { name: 'Failed Attempts', value: String(failedAttempts), inline: true },
-        { name: 'Raid Status', value: isRaid ? 'ACTIVE' : 'stable', inline: true },
+        { name: 'Raid Status', value: isRaid ? 'ACTIVE' : 'Stable', inline: true },
         { name: 'Raid Level', value: raidState.level || 'LOW', inline: true }
       )
       .setColor(isRaid ? 0xe74c3c : 0x2ecc71)
       .setTimestamp();
 
-    return { embeds: [embed] };
+    const controls = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('gateway_dashboard_lockdown')
+        .setLabel('Lockdown')
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId('gateway_dashboard_unlock')
+        .setLabel('Unlock')
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId('gateway_dashboard_forcehard')
+        .setLabel('Force Hard Mode')
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId('gateway_dashboard_reset')
+        .setLabel('Reset Stats')
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    return { embeds: [embed], components: [controls] };
+  }
+
+  async handleControlAction(interaction) {
+    const guildId = interaction.guild?.id;
+    if (!guildId) return false;
+
+    const hasManage = interaction.member?.permissions?.has?.('ManageGuild');
+    if (!hasManage) {
+      await interaction.reply({ content: 'You do not have permission to use Gateway dashboard controls.', ephemeral: true });
+      return true;
+    }
+
+    const action = interaction.customId.replace(/^gateway_dashboard_/, '');
+    await this.gateway.handleDashboardAction(interaction, action);
+    await this.updateDashboard(guildId);
+    return true;
   }
 }

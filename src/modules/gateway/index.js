@@ -1,6 +1,6 @@
 import GatewayConfig from './schema.js';
 import { VisualParser } from '../../core/VisualEngine/Parser.js';
-import { evaluateRisk, recordJoin, observeBehavior } from './RiskEvaluator.js';
+import { evaluateRisk, recordJoin, observeBehavior, updateRisk } from './RiskEvaluator.js';
 import AntiRaidMonitor from './AntiRaidMonitor.js';
 import VerificationFlow from './VerificationFlow.js';
 import DashboardManager from '../../core/DashboardManager.js';
@@ -18,6 +18,7 @@ const DEFAULT_TEMPLATES = {
           { name: 'Risk Level', value: '{risk.level}', inline: true },
           { name: 'Current Step', value: '{flow.currentStep}', inline: true },
           { name: 'Attempts Remaining', value: '{flow.attemptsLeft}/{flow.maxAttempts}', inline: true },
+          { name: 'Behavior Score', value: '{flow.initialData.behaviorScore || 0}', inline: true },
           { name: 'Challenge', value: '{flow.currentStepData.prompt}', inline: false },
         ],
         footer: { text: 'This verification session expires if not completed in time.' },
@@ -35,6 +36,7 @@ const DEFAULT_TEMPLATES = {
           { name: 'Risk Level', value: '{risk.level}', inline: true },
           { name: 'Current Step', value: '{flow.currentStep}', inline: true },
           { name: 'Attempts Remaining', value: '{flow.attemptsLeft}/{flow.maxAttempts}', inline: true },
+          { name: 'Behavior Score', value: '{flow.initialData.behaviorScore || 0}', inline: true },
           { name: 'Challenge', value: '{flow.currentStepData.prompt}', inline: false },
         ],
         footer: { text: 'Answer carefully; failing too many attempts will end the flow.' },
@@ -76,7 +78,63 @@ export default function GatewayModule(client) {
   const verificationFlow = new VerificationFlow(client);
   const xpManager = new XPManager();
   const configCache = new Map();
+  const gatewayState = {
+    hardMode: false,
+    lockdown: false,
+    failCount: 0,
+    maxFailsafeCount: 6,
+    lastRecoveryCheck: Date.now(),
+    recoveryInterval: 300000, // 5 minutes
+    crashDetected: false,
+    updateFailCount() {
+      this.failCount += 1;
+      if (this.failCount >= this.maxFailsafeCount) {
+        this.hardMode = true;
+      }
+    },
+    reset() {
+      this.hardMode = false;
+      this.lockdown = false;
+      this.failCount = 0;
+      this.crashDetected = false;
+    },
+    shouldForceHardMode(guildId) {
+      return this.hardMode || antiRaidMonitor.getRaidStatus(guildId)?.active;
+    },
+    checkSelfRecovery() {
+      const now = Date.now();
+      if (now - this.lastRecoveryCheck > this.recoveryInterval) {
+        this.lastRecoveryCheck = now;
+        
+        // Check for crashed sessions
+        const activeSessions = verificationFlow.sessionManager.getAllSessions();
+        let recoveredCount = 0;
+        
+        for (const [sessionId, session] of activeSessions) {
+          if (session.expiresAt < now) {
+            verificationFlow.sessionManager.deleteSession(sessionId);
+            recoveredCount++;
+          }
+        }
+        
+        if (recoveredCount > 0) {
+          console.log(`[GatewayRecovery] Recovered ${recoveredCount} expired sessions`);
+        }
+        
+        // Reset overload state
+        if (this.crashDetected) {
+          this.crashDetected = false;
+          console.log('[GatewayRecovery] Recovered from overload state');
+        }
+      }
+    },
+  };
+
   let dashboardManager = null;
+  const gatewayApi = {
+    loadConfig,
+    handleDashboardAction: async () => {},
+  };
 
   async function loadConfig(guildId) {
     if (!guildId) return null;
@@ -156,6 +214,10 @@ export default function GatewayModule(client) {
 
   async function handleMemberAdd(member) {
     if (!member.guild || member.user.bot) return;
+    if (gatewayState.lockdown) {
+      dashboardManager?.trackGuild(member.guild.id);
+      return;
+    }
 
     const config = await loadConfig(member.guild.id);
     if (!config?.enabled) return;
@@ -169,9 +231,21 @@ export default function GatewayModule(client) {
       thresholds: config.riskThresholds,
     });
 
+    // Isolation hardening - remove all permissions before verification
+    if (config.unverifiedRole) {
+      try {
+        const unverifiedRole = member.guild.roles.cache.get(config.unverifiedRole);
+        if (unverifiedRole && member.guild.members.me.permissions.has('ManageRoles')) {
+          await member.roles.add(unverifiedRole);
+        }
+      } catch (error) {
+        console.warn('[GatewayModule] Failed to add unverified role:', error.message);
+      }
+    }
+
     await xpManager.setRiskScore(member, risk.score).catch(() => {});
 
-    const overrideMode = antiRaidData.forceHardMode ? 'HARD' : null;
+    const overrideMode = antiRaidData.forceHardMode || gatewayState.shouldForceHardMode(member.guild.id) ? 'HARD++' : null;
     const flow = verificationFlow.createFlow(member, risk, config, overrideMode, true);
     dashboardManager?.trackGuild(member.guild.id);
 
@@ -187,6 +261,43 @@ export default function GatewayModule(client) {
         await sendRichMessage(fallbackChannel, payload, context).catch(() => {});
       }
     }
+  }
+
+  async function handleVerificationSuccess(member, session) {
+    const config = await loadConfig(member.guild.id);
+    
+    // Isolation hardening - assign verified role only after full success
+    if (config.verifiedRole) {
+      try {
+        const verifiedRole = member.guild.roles.cache.get(config.verifiedRole);
+        if (verifiedRole && member.guild.members.me.permissions.has('ManageRoles')) {
+          await member.roles.add(verifiedRole);
+          
+          // Remove unverified role
+          if (config.unverifiedRole) {
+            const unverifiedRole = member.guild.roles.cache.get(config.unverifiedRole);
+            if (unverifiedRole) {
+              await member.roles.remove(unverifiedRole);
+            }
+          }
+        }
+      } catch (error) {
+        console.warn('[GatewayModule] Failed to assign verified role:', error.message);
+      }
+    }
+
+    // Update trust score positively
+    updateTrust({ member }, 10);
+
+    // Log successful verification
+    verificationFlow.logSecurityEvent('verification_success', {
+      userId: member.id,
+      guildId: member.guild.id,
+      totalSteps: session.steps.length,
+      behaviorScore: session.initialData.behaviorScore,
+      suspiciousFlags: session.metadata.suspiciousFlags.length,
+      completionTime: Date.now() - session.createdAt,
+    });
   }
 
   async function saveVisualTemplate(guildId, templateType, templatePayload) {
@@ -226,52 +337,101 @@ export default function GatewayModule(client) {
     return { flow, payload, risk, config };
   }
 
-  async function handleGatewayInteraction(interaction) {
-    const customId = interaction.customId;
-    if (!customId?.startsWith('gateway_v4_')) return false;
+  async function handleDashboardAction(interaction, action) {
+    const guildId = interaction.guild?.id;
+    if (!guildId) return false;
 
-    const member = interaction.member;
-    if (!member || !interaction.guild) {
+    switch (action) {
+      case 'lockdown':
+        gatewayState.lockdown = true;
+        await interaction.reply({ content: 'Gateway is now in lockdown mode. New verification sessions will be paused.', ephemeral: true }).catch(() => {});
+        break;
+      case 'unlock':
+        gatewayState.lockdown = false;
+        gatewayState.failCount = 0;
+        await interaction.reply({ content: 'Gateway lockdown has been lifted.', ephemeral: true }).catch(() => {});
+        break;
+      case 'forcehard':
+        gatewayState.hardMode = true;
+        await interaction.reply({ content: 'Gateway will now prioritize HARD mode for new flows.', ephemeral: true }).catch(() => {});
+        break;
+      case 'reset':
+        gatewayState.reset();
+        dashboardManager?.failedAttempts.delete(guildId);
+        await interaction.reply({ content: 'Gateway statistics and failsafe state have been reset.', ephemeral: true }).catch(() => {});
+        break;
+      default:
+        await interaction.reply({ content: 'Unknown dashboard action.', ephemeral: true }).catch(() => {});
+        return false;
+    }
+
+    dashboardManager?.trackGuild(guildId);
+    return true;
+  }
+
+  async function handleGatewayInteraction(interaction) {
+    if (!interaction.customId?.startsWith('gateway_v4_')) return false;
+    if (!interaction.guild || !interaction.member) {
       await interaction.reply({ content: 'Unable to resolve your member state.', ephemeral: true }).catch(() => {});
       return true;
     }
 
-    await interaction.deferUpdate().catch(() => {});
-    const config = await loadConfig(interaction.guild.id);
-    const antiRaidStatus = antiRaidMonitor.getRaidStatus(interaction.guild.id);
-    const flowBehavior = observeBehavior(member, 'interaction');
-
-    const result = verificationFlow.processInteraction(interaction);
-    const session = result.session || null;
-    const risk = session?.risk || { score: 0, level: 'EASY', color: '#2ecc71', reasons: [] };
-    if (flowBehavior.adjustment && session) {
-      session.risk = {
-        ...risk,
-        score: clampScore((risk.score || 0) + flowBehavior.adjustment),
-        reasons: [...new Set([...(risk.reasons || []), flowBehavior.reason].filter(Boolean))],
-      };
+    if (interaction.customId.startsWith('gateway_dashboard_')) {
+      return dashboardManager.handleControlAction(interaction);
     }
 
-    const context = buildContext(member, session || { currentStep: 'unknown' }, risk, antiRaidStatus);
+    const flowData = verificationFlow.extractInteractionData(interaction);
+    if (!flowData.sessionId) {
+      await interaction.reply({ content: 'Invalid verification token.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    const session = verificationFlow.getFlowById(flowData.sessionId);
+    if (!session) {
+      await interaction.reply({ content: 'This verification session is no longer valid.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    if (session.userId !== interaction.user.id) {
+      await interaction.reply({ content: 'This verification flow is not yours.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    if (verificationFlow.sessionManager.isRateLimited(interaction.user.id)) {
+      await interaction.reply({ content: 'Please wait a moment before interacting again.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    verificationFlow.sessionManager.touchInteraction(interaction.user.id);
+    await interaction.deferUpdate().catch(() => {});
+
+    const config = await loadConfig(interaction.guild.id);
+    const antiRaidStatus = antiRaidMonitor.getRaidStatus(interaction.guild.id);
+
+    const result = verificationFlow.processInteraction(interaction);
+    const activeSession = result.session || session;
+    const computedRisk = activeSession?.risk || { score: 0, level: 'EASY', color: '#2ecc71', reasons: [] };
 
     if (result.status === 'missing') {
-      const payload = buildVisualPayload('verify_fail', config, context);
+      const payload = buildVisualPayload('verify_fail', config, buildContext(interaction.member, activeSession, computedRisk, antiRaidStatus));
       await interaction.editReply(payload).catch(() => {});
       return true;
     }
 
     if (result.status === 'timeout') {
-      const payload = buildVisualPayload('verify_timeout', config, context);
-      await dashboardManager?.recordFailedAttempt(interaction.guild.id);
+      gatewayState.updateFailCount();
+      dashboardManager?.recordFailedAttempt(interaction.guild.id);
+      const payload = buildVisualPayload('verify_timeout', config, buildContext(interaction.member, activeSession, computedRisk, antiRaidStatus));
       await animateVerification(interaction, payload);
       return true;
     }
 
     if (result.status === 'failed') {
-      const payload = buildVisualPayload('verify_fail', config, context);
+      gatewayState.updateFailCount();
       dashboardManager?.recordFailedAttempt(interaction.guild.id);
-      if (session?.config?.verification?.[session.mode.toLowerCase()]?.kickOnFailure && interaction.guild.members.me?.permissions.has('KickMembers')) {
-        interaction.guild.members.fetch(member.id).then((guildMember) => {
+      const payload = buildVisualPayload('verify_fail', config, buildContext(interaction.member, activeSession, computedRisk, antiRaidStatus));
+      if (activeSession?.config?.verification?.[activeSession.mode.toLowerCase()]?.kickOnFailure && interaction.guild.members.me?.permissions.has('KickMembers')) {
+        interaction.guild.members.fetch(activeSession.userId).then((guildMember) => {
           if (guildMember.kickable) {
             guildMember.kick('Failed verification flow.').catch(() => {});
           }
@@ -282,18 +442,19 @@ export default function GatewayModule(client) {
     }
 
     if (result.status === 'success') {
-      const payload = buildVisualPayload('verify_success', config, context);
+      const payload = buildVisualPayload('verify_success', config, buildContext(interaction.member, activeSession, computedRisk, antiRaidStatus));
       await animateVerification(interaction, payload);
+      await handleVerificationSuccess(interaction.member, activeSession);
       return true;
     }
 
     if (result.status === 'advance' || result.status === 'retry') {
-      const payload = buildVisualPayload('verify_step', config, context);
+      const payload = buildVisualPayload('verify_step', config, buildContext(interaction.member, activeSession, computedRisk, antiRaidStatus));
       await interaction.editReply(payload).catch(() => {});
       return true;
     }
 
-    const payload = buildVisualPayload('verify_fail', config, context);
+    const payload = buildVisualPayload('verify_fail', config, buildContext(interaction.member, activeSession, computedRisk, antiRaidStatus));
     await interaction.editReply(payload).catch(() => {});
     return true;
   }
@@ -312,11 +473,20 @@ export default function GatewayModule(client) {
     if (!message.guild || message.author.bot) return;
     await antiRaidMonitor.observeMessage(message);
     const config = await loadConfig(message.guild.id);
-    observeBehavior(message.member, 'message');
+    const riskUpdate = updateRisk(message.member, { eventType: 'message', thresholds: config?.riskThresholds });
+    if (riskUpdate.risk.level === 'HARD' || riskUpdate.trustLevel === 'LOW') {
+      gatewayState.hardMode = true;
+    }
     dashboardManager?.trackGuild(message.guild.id);
   }
 
-  dashboardManager = new DashboardManager(client, verificationFlow.sessionManager, antiRaidMonitor, { loadConfig });
+  dashboardManager = new DashboardManager(client, verificationFlow.sessionManager, antiRaidMonitor, gatewayApi);
+  gatewayApi.handleDashboardAction = handleDashboardAction;
+
+  // Start self-recovery monitoring
+  setInterval(() => {
+    gatewayState.checkSelfRecovery();
+  }, gatewayState.recoveryInterval);
 
   return {
     handleMemberAdd,
@@ -327,5 +497,6 @@ export default function GatewayModule(client) {
     saveVisualTemplate,
     getVisualTemplate,
     simulateFlow,
+    getSecurityLogs: (guildId, userId) => verificationFlow.getSecurityLogs(guildId, userId),
   };
 }
