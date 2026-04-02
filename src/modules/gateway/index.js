@@ -1,6 +1,7 @@
 import GatewayConfig from './schema.js';
+import SecurityLog from './SecurityLogSchema.js';
 import { VisualParser } from '../../core/VisualEngine/Parser.js';
-import { evaluateRisk, recordJoin, observeBehavior, updateRisk } from './RiskEvaluator.js';
+import { evaluateRisk, recordJoin, observeBehavior, updateRisk, updateTrust } from './RiskEvaluator.js';
 import AntiRaidMonitor from './AntiRaidMonitor.js';
 import VerificationFlow from './VerificationFlow.js';
 import DashboardManager from '../../core/DashboardManager.js';
@@ -78,6 +79,10 @@ export default function GatewayModule(client) {
   const verificationFlow = new VerificationFlow(client);
   const xpManager = new XPManager();
   const configCache = new Map();
+  
+  // Tracking: DM entry flow
+  const dmEntryTracking = new Map(); // userId -> { attempts: number, lastAttempt: timestamp }
+
   const gatewayState = {
     hardMode: false,
     lockdown: false,
@@ -100,6 +105,50 @@ export default function GatewayModule(client) {
     },
     shouldForceHardMode(guildId) {
       return this.hardMode || antiRaidMonitor.getRaidStatus(guildId)?.active;
+    },
+    checkConcurrentSessions() {
+      const currentCount = verificationFlow.sessionManager.getActiveSessionCount();
+      return currentCount < maxConcurrentSessions;
+    },
+    checkInteractionSpam(userId) {
+      const now = Date.now();
+      const windowMs = 10_000; // 10 second window
+      if (!interactionFrequency.has(userId)) {
+        interactionFrequency.set(userId, { timestamps: [] });
+      }
+      const entry = interactionFrequency.get(userId);
+      entry.timestamps = entry.timestamps.filter((ts) => ts > now - windowMs);
+      return entry.timestamps.length >= spamThreshold;
+    },
+    recordInteraction(userId) {
+      const now = Date.now();
+      if (!interactionFrequency.has(userId)) {
+        interactionFrequency.set(userId, { timestamps: [] });
+      }
+      interactionFrequency.get(userId).timestamps.push(now);
+    },
+    checkDmSpam(userId) {
+      const now = Date.now();
+      const windowMs = 60_000; // 1 minute
+      const maxAttempts = 2;
+      if (!dmEntryTracking.has(userId)) {
+        dmEntryTracking.set(userId, { attempts: 0, lastAttempt: 0 });
+      }
+      const entry = dmEntryTracking.get(userId);
+      if (now - entry.lastAttempt > windowMs) {
+        entry.attempts = 0;
+      }
+      return entry.attempts >= maxAttempts;
+    },
+    recordDmAttempt(userId) {
+      const now = Date.now();
+      if (!dmEntryTracking.has(userId)) {
+        dmEntryTracking.set(userId, { attempts: 0, lastAttempt: 0 });
+      }
+      const entry = dmEntryTracking.get(userId);
+      entry.attempts += 1;
+      entry.lastAttempt = now;
+      dmEntryTracking.set(userId, entry);
     },
     checkSelfRecovery() {
       const now = Date.now();
@@ -125,6 +174,22 @@ export default function GatewayModule(client) {
         if (this.crashDetected) {
           this.crashDetected = false;
           console.log('[GatewayRecovery] Recovered from overload state');
+        }
+        
+        // Cleanup old interaction frequency records
+        const cutoffTime = now - 60_000;
+        for (const [userId, entry] of interactionFrequency.entries()) {
+          entry.timestamps = entry.timestamps.filter((ts) => ts > cutoffTime);
+          if (entry.timestamps.length === 0) {
+            interactionFrequency.delete(userId);
+          }
+        }
+
+        // Cleanup old DM tracking
+        for (const [userId, entry] of dmEntryTracking.entries()) {
+          if (now - entry.lastAttempt > 300_000) { // 5 minutes
+            dmEntryTracking.delete(userId);
+          }
         }
       }
     },
@@ -222,15 +287,6 @@ export default function GatewayModule(client) {
     const config = await loadConfig(member.guild.id);
     if (!config?.enabled) return;
 
-    const antiRaidData = antiRaidMonitor.trackJoin(member, config);
-    const rejoinSignal = recordJoin(member);
-    const risk = evaluateRisk(member, {
-      rejoinAdjustment: rejoinSignal.adjustment,
-      reasons: rejoinSignal.reasons,
-      adjustment: antiRaidData.adjustment,
-      thresholds: config.riskThresholds,
-    });
-
     // Isolation hardening - remove all permissions before verification
     if (config.unverifiedRole) {
       try {
@@ -243,7 +299,76 @@ export default function GatewayModule(client) {
       }
     }
 
+    // Send DM entry prompt
+    const dmPayload = {
+      embeds: [{
+        title: '👋 Welcome to the Server!',
+        description: 'To access the server, please type **"start"** in this DM to begin verification.',
+        color: 0x3498db,
+        footer: { text: 'This is a one-time process for security.' },
+      }],
+    };
+
+    try {
+      await sendRichMessage(member, dmPayload, {});
+    } catch (error) {
+      console.warn('[GatewayModule] DM failed, using fallback channel:', error.message);
+      // Fallback to verification channel
+      const fallbackChannel = member.guild.channels.cache.find((c) => c.name.toLowerCase().includes('verification') && c.isTextBased());
+      if (fallbackChannel) {
+        const fallbackPayload = {
+          content: `${member}`,
+          embeds: [{
+            title: '👋 Welcome!',
+            description: 'Please enable DMs or click below to start verification.',
+            color: 0x3498db,
+          }],
+          components: [{
+            type: 1,
+            components: [{
+              type: 2,
+              label: 'Start Verification',
+              customId: `gateway_entry_${member.id}`,
+              style: 1, // Primary
+            }],
+          }],
+        };
+        await sendRichMessage(fallbackChannel, fallbackPayload, {});
+      }
+    }
+
+    dashboardManager?.trackGuild(member.guild.id);
+  }
+
+  async function startVerification(member) {
+    const config = await loadConfig(member.guild.id);
+    if (!config?.enabled) return;
+
+    const antiRaidData = antiRaidMonitor.trackJoin(member, config);
+    const rejoinSignal = recordJoin(member);
+    const risk = evaluateRisk(member, {
+      rejoinAdjustment: rejoinSignal.adjustment,
+      reasons: rejoinSignal.reasons,
+      adjustment: antiRaidData.adjustment,
+      thresholds: config.riskThresholds,
+    });
+
     await xpManager.setRiskScore(member, risk.score).catch(() => {});
+
+    // Check global concurrent session limit
+    if (!gatewayState.checkConcurrentSessions()) {
+      const response = {
+        embeds: [{
+          title: '⚠️ Server Overloaded',
+          description: 'Too many verification sessions are active. Please try again in a moment.',
+          color: 0xf39c12,
+        }],
+      };
+      try {
+        await sendRichMessage(member, response, {});
+      } catch {}
+      return;
+    }
 
     const overrideMode = antiRaidData.forceHardMode || gatewayState.shouldForceHardMode(member.guild.id) ? 'HARD++' : null;
     const flow = verificationFlow.createFlow(member, risk, config, overrideMode, true);
@@ -255,49 +380,8 @@ export default function GatewayModule(client) {
     try {
       await sendRichMessage(member, payload, context);
     } catch (error) {
-      console.warn('[GatewayModule] DM failed, falling back to system channel:', error.message || error);
-      const fallbackChannel = member.guild.systemChannel || member.guild.channels.cache.find((c) => c.isTextBased() && c.permissionsFor(member.guild.members.me).has('SendMessages'));
-      if (fallbackChannel) {
-        await sendRichMessage(fallbackChannel, payload, context).catch(() => {});
-      }
+      console.warn('[GatewayModule] Failed to send verification start:', error.message);
     }
-  }
-
-  async function handleVerificationSuccess(member, session) {
-    const config = await loadConfig(member.guild.id);
-    
-    // Isolation hardening - assign verified role only after full success
-    if (config.verifiedRole) {
-      try {
-        const verifiedRole = member.guild.roles.cache.get(config.verifiedRole);
-        if (verifiedRole && member.guild.members.me.permissions.has('ManageRoles')) {
-          await member.roles.add(verifiedRole);
-          
-          // Remove unverified role
-          if (config.unverifiedRole) {
-            const unverifiedRole = member.guild.roles.cache.get(config.unverifiedRole);
-            if (unverifiedRole) {
-              await member.roles.remove(unverifiedRole);
-            }
-          }
-        }
-      } catch (error) {
-        console.warn('[GatewayModule] Failed to assign verified role:', error.message);
-      }
-    }
-
-    // Update trust score positively
-    updateTrust({ member }, 10);
-
-    // Log successful verification
-    verificationFlow.logSecurityEvent('verification_success', {
-      userId: member.id,
-      guildId: member.guild.id,
-      totalSteps: session.steps.length,
-      behaviorScore: session.initialData.behaviorScore,
-      suspiciousFlags: session.metadata.suspiciousFlags.length,
-      completionTime: Date.now() - session.createdAt,
-    });
   }
 
   async function saveVisualTemplate(guildId, templateType, templatePayload) {
@@ -370,9 +454,23 @@ export default function GatewayModule(client) {
   }
 
   async function handleGatewayInteraction(interaction) {
-    if (!interaction.customId?.startsWith('gateway_v4_')) return false;
+    if (!interaction.customId?.startsWith('gateway_v4_') && !interaction.customId?.startsWith('gateway_entry_')) return false;
     if (!interaction.guild || !interaction.member) {
       await interaction.reply({ content: 'Unable to resolve your member state.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    // Handle entry button
+    if (interaction.customId.startsWith('gateway_entry_')) {
+      const userId = interaction.customId.replace('gateway_entry_', '');
+      if (userId !== interaction.user.id) {
+        await interaction.reply({ content: 'This is not for you.', ephemeral: true }).catch(() => {});
+        return true;
+      }
+
+      await interaction.deferReply({ ephemeral: true }).catch(() => {});
+      await startVerification(interaction.member);
+      await interaction.editReply({ content: '✅ Verification started! Check your DMs.' }).catch(() => {});
       return true;
     }
 
@@ -396,6 +494,23 @@ export default function GatewayModule(client) {
       await interaction.reply({ content: 'This verification flow is not yours.', ephemeral: true }).catch(() => {});
       return true;
     }
+
+    // Anti-spam check: too many interactions in short window
+    if (gatewayState.checkInteractionSpam(interaction.user.id)) {
+      await interaction.reply({ content: '🚫 You are interacting too frequently. Please slow down.', ephemeral: true }).catch(() => {});
+      // Log spam attempt
+      await SecurityLog.create({
+        guildId: interaction.guild.id,
+        userId: interaction.user.id,
+        eventType: 'interaction_spam',
+        severity: 'medium',
+        reason: 'Too many interactions detected',
+        metadata: { sessionId: session?.sessionId },
+      }).catch(() => {});
+      return true;
+    }
+
+    gatewayState.recordInteraction(interaction.user.id);
 
     if (verificationFlow.sessionManager.isRateLimited(interaction.user.id)) {
       await interaction.reply({ content: 'Please wait a moment before interacting again.', ephemeral: true }).catch(() => {});
@@ -470,14 +585,43 @@ export default function GatewayModule(client) {
   }
 
   async function observeMessage(message) {
-    if (!message.guild || message.author.bot) return;
-    await antiRaidMonitor.observeMessage(message);
-    const config = await loadConfig(message.guild.id);
-    const riskUpdate = updateRisk(message.member, { eventType: 'message', thresholds: config?.riskThresholds });
-    if (riskUpdate.risk.level === 'HARD' || riskUpdate.trustLevel === 'LOW') {
-      gatewayState.hardMode = true;
+    if (!message.guild && !message.author.bot) {
+      // DM message
+      if (message.content.toLowerCase().trim() === 'start') {
+        if (gatewayState.checkDmSpam(message.author.id)) {
+          await message.reply('🚫 Too many attempts. Please wait a moment.').catch(() => {});
+          return;
+        }
+        gatewayState.recordDmAttempt(message.author.id);
+
+        const embed = {
+          title: '🔐 Ready to Verify',
+          description: 'Click the button below to start your verification process.',
+          color: 0x2ecc71,
+        };
+
+        const components = [{
+          type: 1,
+          components: [{
+            type: 2,
+            label: 'Start Verification',
+            customId: `gateway_entry_${message.author.id}`,
+            style: 3, // Success
+          }],
+        }];
+
+        await message.reply({ embeds: [embed], components }).catch(() => {});
+      }
+    } else if (message.guild) {
+      // Guild message
+      await antiRaidMonitor.observeMessage(message);
+      const config = await loadConfig(message.guild.id);
+      const riskUpdate = updateRisk(message.member, { eventType: 'message', thresholds: config?.riskThresholds });
+      if (riskUpdate.risk.level === 'HARD' || riskUpdate.trustLevel === 'LOW') {
+        gatewayState.hardMode = true;
+      }
+      dashboardManager?.trackGuild(message.guild.id);
     }
-    dashboardManager?.trackGuild(message.guild.id);
   }
 
   dashboardManager = new DashboardManager(client, verificationFlow.sessionManager, antiRaidMonitor, gatewayApi);
@@ -497,6 +641,7 @@ export default function GatewayModule(client) {
     saveVisualTemplate,
     getVisualTemplate,
     simulateFlow,
+    startVerification,
     getSecurityLogs: (guildId, userId) => verificationFlow.getSecurityLogs(guildId, userId),
   };
 }

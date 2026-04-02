@@ -1,4 +1,5 @@
 import SessionManager from '../../core/SessionManager.js';
+import SecurityLog from './SecurityLogSchema.js';
 import crypto from 'crypto';
 
 const ALLOWED_MODES = ['EASY', 'NORMAL', 'HARD', 'HARD++'];
@@ -182,7 +183,10 @@ export default class VerificationFlow {
   createStepData(step, sessionId) {
     const token = generateToken();
     const session = this.sessionManager.getSessionById(sessionId);
-    if (session) {
+    if (session && session.initialData) {
+      if (!session.initialData.tokens) {
+        session.initialData.tokens = new Map();
+      }
       session.initialData.tokens.set(step, token);
     }
 
@@ -226,28 +230,44 @@ export default class VerificationFlow {
         };
       }
       case 'TIMING_CHALLENGE': {
-        const delay = Math.random() * 3000 + 1000; // 1-4 seconds
+        const delayMs = Math.random() * 3000 + 1000;
+        const timingTolerance = 500;
         return {
           step,
           token,
-          prompt: `Wait for the button to appear, then click it immediately.`,
+          prompt: `⏱️ Wait for the button to appear, then click it immediately.`,
           expectedAnswer: 'timed_click',
-          delay,
-          components: [], // Will be added after delay
-          customId: buildSafeCustomId([step, sessionId, 'timed_click', token]),
-        };
-      }
-      case 'BEHAVIOR_CHALLENGE': {
-        return {
-          step,
-          token,
-          prompt: `Solve this simple math: What is ${Math.floor(Math.random() * 10) + 1} + ${Math.floor(Math.random() * 10) + 1}?`,
-          expectedAnswer: 'math_answer', // Will be calculated
+          expectedTimeWindow: {
+            delayMs,
+            tolerance: timingTolerance,
+            startTimestamp: Date.now(),
+          },
           components: [
             {
               type: 'button',
-              label: 'Calculate',
-              customId: buildSafeCustomId([step, sessionId, 'calculate', token]),
+              label: 'Loading...',
+              customId: buildSafeCustomId([step, sessionId, 'loading', token]),
+              style: 'secondary',
+              disabled: true,
+            },
+          ],
+        };
+      }
+      case 'BEHAVIOR_CHALLENGE': {
+        const num1 = Math.floor(Math.random() * 10) + 1;
+        const num2 = Math.floor(Math.random() * 10) + 1;
+        const correctAnswer = num1 + num2;
+        return {
+          step,
+          token,
+          prompt: `🧮 Solve this math challenge to continue:\n**What is ${num1} + ${num2}?**`,
+          expectedAnswer: String(correctAnswer),
+          mathExpression: { num1, num2, operation: 'add', result: correctAnswer },
+          components: [
+            {
+              type: 'button',
+              label: 'Enter Answer',
+              customId: buildSafeCustomId([step, sessionId, 'math_modal', token]),
               style: 'primary',
             },
           ],
@@ -479,20 +499,29 @@ export default class VerificationFlow {
   validateAnswer(session, answer, interaction) {
     if (!answer) return false;
 
-    const normalizedAnswer = String(answer).trim().toLowerCase();
-    const expectedAnswer = String(session.currentStepData.expectedAnswer).trim().toLowerCase();
+    const now = Date.now();
+    const stepData = session.currentStepData;
 
-    // Special handling for different challenge types
-    if (session.currentStep === 'BEHAVIOR_CHALLENGE') {
-      // For math challenges, we need to calculate the expected answer
-      const prompt = session.currentStepData.prompt;
-      const match = prompt.match(/What is (\d+) \+ (\d+)\?/);
-      if (match) {
-        const expected = parseInt(match[1]) + parseInt(match[2]);
-        return normalizedAnswer === expected.toString();
-      }
+    // TIMING_CHALLENGE: strict time window validation
+    if (session.currentStep === 'TIMING_CHALLENGE') {
+      if (!stepData.expectedTimeWindow) return false;
+      const { delayMs, tolerance, startTimestamp } = stepData.expectedTimeWindow;
+      const expectedClickTime = startTimestamp + delayMs;
+      const timeDiff = Math.abs(now - expectedClickTime);
+      return timeDiff <= tolerance;
     }
 
+    // BEHAVIOR_CHALLENGE: strict numeric comparison
+    if (session.currentStep === 'BEHAVIOR_CHALLENGE') {
+      if (!stepData.mathExpression) return false;
+      const userAnswer = String(answer).trim();
+      const expectedAnswer = String(stepData.mathExpression.result);
+      return userAnswer === expectedAnswer;
+    }
+
+    // All other steps: normalized string comparison
+    const normalizedAnswer = String(answer).trim().toLowerCase();
+    const expectedAnswer = String(stepData.expectedAnswer).trim().toLowerCase();
     return normalizedAnswer === expectedAnswer;
   }
 
@@ -572,18 +601,50 @@ export default class VerificationFlow {
     if (interaction.guild?.members?.me?.permissions.has('KickMembers')) {
       interaction.guild.members.fetch(session.userId).then((member) => {
         if (member.kickable) {
-          member.kick(`Security violation: ${reason}`).catch(() => {});
+          member.kick(`Security violation: ${reason}`).catch((error) => {
+            console.error('[VerificationFlow] Failed to kick user:', error.message);
+          });
         }
       }).catch(() => {});
     }
+
+    this.logSecurityEvent('user_kick', {
+      userId: session.userId,
+      guildId: session.initialData.guildId,
+      reason,
+      severity: 'high',
+      timestamp: Date.now(),
+    });
   }
 
   timeoutUser(session, interaction) {
-    // Implement timeout logic
+    const severity = this.calculatePunishmentSeverity(session, 'interaction_spam');
+    let durationMs = 60_000; // Default: 1 minute
+
+    if (severity === 'high') {
+      durationMs = 600_000; // 10 minutes
+    } else if (severity === 'extreme') {
+      durationMs = 3600_000; // 1 hour
+    }
+
+    if (interaction.guild?.members?.me?.permissions.has('ModerateMembers')) {
+      interaction.guild.members.fetch(session.userId).then((member) => {
+        if (member.moderatable) {
+          member.timeout(durationMs, `Security violation: Failed verification (${severity} severity)`).catch((error) => {
+            console.error('[VerificationFlow] Failed to timeout user:', error.message);
+          });
+        }
+      }).catch((error) => {
+        console.error('[VerificationFlow] Failed to fetch member for timeout:', error.message);
+      });
+    }
+
     this.logSecurityEvent('user_timeout', {
       userId: session.userId,
       guildId: session.initialData.guildId,
-      duration: 300000, // 5 minutes
+      durationMs,
+      severity,
+      timestamp: Date.now(),
     });
   }
 
@@ -615,7 +676,40 @@ export default class VerificationFlow {
       logs.shift();
     }
 
+    // Persist to DB asynchronously
+    const severity = this.calculateEventSeverity(eventType, data);
+    SecurityLog.create({
+      guildId: data.guildId,
+      userId: data.userId,
+      eventType,
+      severity,
+      reason: data.reason || eventType,
+      metadata: data,
+      timestamp: new Date(logEntry.timestamp),
+    }).catch((error) => {
+      console.error('[SecurityLog] Failed to persist log:', error.message);
+    });
+
     console.log(`[SecurityLogger] ${eventType}:`, data);
+  }
+
+  calculateEventSeverity(eventType, data = {}) {
+    switch (eventType) {
+      case 'honeypot_triggered':
+      case 'blacklist_user':
+        return 'extreme';
+      case 'user_kick':
+      case 'user_timeout':
+        return 'high';
+      case 'step_failure':
+      case 'interaction_spam':
+        return data.severity || 'medium';
+      case 'validation_failure':
+      case 'behavior_anomaly':
+        return 'medium';
+      default:
+        return 'low';
+    }
   }
 
   getSecurityLogs(guildId, userId) {

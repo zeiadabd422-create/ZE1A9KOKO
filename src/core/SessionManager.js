@@ -130,10 +130,14 @@ export default class SessionManager {
 
   cleanupExpired() {
     const now = Date.now();
+    const expiredIds = [];
     for (const [sessionId, session] of this.sessionsById.entries()) {
       if (session.expiresAt <= now || session.currentStepExpiresAt <= now) {
-        this.deleteSession(sessionId);
+        expiredIds.push(sessionId);
       }
+    }
+    for (const sessionId of expiredIds) {
+      this.deleteSession(sessionId);
     }
   }
 
@@ -149,6 +153,11 @@ export default class SessionManager {
   getActiveSessionCount() {
     this.cleanupExpired();
     return this.sessionsById.size;
+  }
+
+  getAllSessions() {
+    this.cleanupExpired();
+    return Array.from(this.sessionsById.entries());
   }
 
   isRateLimited(userId, cooldownMs = 1_200) {
