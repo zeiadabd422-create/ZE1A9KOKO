@@ -61,14 +61,18 @@ async function handleButtonInteraction(interaction) {
   if (gateway?.handleButtonInteraction) {
     try {
       const handled = await gateway.handleButtonInteraction(interaction);
-      if (handled) return;
+      if (handled) {
+        return true; // Gateway handled it
+      }
     } catch (error) {
-      console.error('[InteractionDispatcher] gateway button handler failed:', error);
+      console.error('[InteractionDispatcher] Gateway button handler failed:', error);
+      return true; // Mark as handled even on error to prevent Shop handler
     }
   }
 
+  // Try shop handler only if gateway didn't handle it
   const shopHandled = await handleShopButton(interaction);
-  if (shopHandled) return;
+  return shopHandled ? true : false;
 }
 
 async function handleSelectMenuInteraction(interaction) {

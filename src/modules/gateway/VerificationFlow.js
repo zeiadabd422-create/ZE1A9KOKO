@@ -194,21 +194,30 @@ export default class VerificationFlow {
       case 'TEXT_CHALLENGE': {
         const correct = TEXT_WORDS[Math.floor(Math.random() * TEXT_WORDS.length)];
         const options = shuffleArray(TEXT_WORDS)
-          .map((word) => ({ label: word, value: word }))
-          .slice(0, 4);
+          .filter(w => w !== correct)
+          .slice(0, 3);
+        options.push(correct);
+        const shuffledOptions = shuffleArray(options);
 
         return {
           step,
           token,
-          prompt: `Choose the correct textual answer: **${correct}**`,
+          prompt: `اكتب الكلمة الصحيحة: **${correct}**`,
           expectedAnswer: correct,
           components: [
             {
-              type: 'select',
-              customId: buildSafeCustomId([step, sessionId, 'select', token]),
-              placeholder: 'Select the right text answer',
-              options,
-            },
+              type: 1,
+              components: [{
+                type: 4,
+                custom_id: buildSafeCustomId([step, sessionId, 'input', token]),
+                label: 'أدخل الإجابة',
+                style: 1,
+                placeholder: 'اكتب الكلمة هنا',
+                required: true,
+                min_length: 1,
+                max_length: 50,
+              }]
+            }
           ],
         };
       }
@@ -230,26 +239,30 @@ export default class VerificationFlow {
         };
       }
       case 'TIMING_CHALLENGE': {
-        const delayMs = Math.random() * 3000 + 1000;
+        const delayMs = Math.random() * 3000 + 2000;
         const timingTolerance = 500;
         return {
           step,
           token,
-          prompt: `⏱️ Wait for the button to appear, then click it immediately.`,
+          prompt: `⏱️ انتظر ظهور الزرار ثم اضغط عليه بسرعة!`,
           expectedAnswer: 'timed_click',
           expectedTimeWindow: {
             delayMs,
             tolerance: timingTolerance,
             startTimestamp: Date.now(),
+            shouldShowAfterDelay: true,
           },
           components: [
             {
-              type: 'button',
-              label: 'Loading...',
-              customId: buildSafeCustomId([step, sessionId, 'loading', token]),
-              style: 'secondary',
-              disabled: true,
-            },
+              type: 1,
+              components: [{
+                type: 2,
+                label: '⏳ جاري العد...',
+                custom_id: buildSafeCustomId([step, sessionId, 'waiting', token]),
+                style: 2,
+                disabled: true,
+              }]
+            }
           ],
         };
       }
@@ -260,16 +273,23 @@ export default class VerificationFlow {
         return {
           step,
           token,
-          prompt: `🧮 Solve this math challenge to continue:\n**What is ${num1} + ${num2}?**`,
+          prompt: `🧮 اجمع هذين الرقمين:\n**${num1} + ${num2} = ?**`,
           expectedAnswer: String(correctAnswer),
           mathExpression: { num1, num2, operation: 'add', result: correctAnswer },
           components: [
             {
-              type: 'button',
-              label: 'Enter Answer',
-              customId: buildSafeCustomId([step, sessionId, 'math_modal', token]),
-              style: 'primary',
-            },
+              type: 1,
+              components: [{
+                type: 4,
+                custom_id: buildSafeCustomId([step, sessionId, 'math_input', token]),
+                label: 'أدخل الإجابة',
+                style: 1,
+                placeholder: 'أدخل الرقم هنا',
+                required: true,
+                min_length: 1,
+                max_length: 3,
+              }]
+            }
           ],
         };
       }
@@ -388,9 +408,35 @@ export default class VerificationFlow {
   }
 
   extractInteractionData(interaction) {
-    const customId = interaction.customId || '';
+    const customId = interaction.customId || interaction.fields?.components?.[0]?.components?.[0]?.custom_id || '';
     const parsed = parseCustomId(customId);
-    const answer = interaction.isStringSelectMenu() ? interaction.values?.[0] || parsed.answer : parsed.answer;
+    
+    let answer = parsed.answer;
+    if (interaction.isStringSelectMenu?.()) {
+      answer = interaction.values?.[0] || parsed.answer;
+    } else if (interaction.isModalSubmit?.()) {
+      // Try to get text input from modal
+      const fields = interaction.fields;
+      if (fields) {
+        const textInputs = fields.getTextInputValue ? fields.getTextInputValue : null;
+        if (textInputs) {
+          try {
+            // Get first text input value
+            const components = fields.components || [];
+            for (const component of components) {
+              const inputs = component.components || [];
+              for (const input of inputs) {
+                if (input.type === 4) { // Text input
+                  answer = fields.getTextInputValue(input.custom_id) || answer;
+                  break;
+                }
+              }
+            }
+          } catch (e) {}
+        }
+      }
+    }
+
     return {
       step: parsed.step,
       sessionId: parsed.sessionId,
@@ -438,7 +484,32 @@ export default class VerificationFlow {
     }
 
     const session = validation.session;
-    const { answer, token } = this.extractInteractionData(interaction);
+    let answer = null;
+
+    // Handle modals
+    if (interaction.isModalSubmit?.()) {
+      try {
+        const fields = interaction.fields;
+        if (fields?.components) {
+          for (const component of fields.components) {
+            const inputs = component.components || [];
+            for (const input of inputs) {
+              if (input.type === 4) { // Text input type
+                answer = fields.getTextInputValue(input.custom_id);
+                break;
+              }
+            }
+            if (answer) break;
+          }
+        }
+      } catch (e) {
+        console.error('[VerificationFlow] Modal field parsing error:', e.message);
+      }
+    } else {
+      const { answer: extractedAnswer } = this.extractInteractionData(interaction);
+      answer = extractedAnswer;
+    }
+
     const now = Date.now();
 
     // Behavior profiling
@@ -497,10 +568,22 @@ export default class VerificationFlow {
   }
 
   validateAnswer(session, answer, interaction) {
-    if (!answer) return false;
+    if (!answer && !interaction?.fields) return false;
 
     const now = Date.now();
     const stepData = session.currentStepData;
+
+    // Handle modal submissions (text inputs)
+    if (interaction?.isModalSubmit?.()) {
+      const field = interaction.fields.getTextInputValue(
+        buildSafeCustomId([session.currentStep, session.sessionId, 'input', stepData.token])
+      ) || interaction.fields.getTextInputValue(
+        buildSafeCustomId([session.currentStep, session.sessionId, 'math_input', stepData.token])
+      );
+      if (field) {
+        answer = field;
+      }
+    }
 
     // TIMING_CHALLENGE: strict time window validation
     if (session.currentStep === 'TIMING_CHALLENGE') {
@@ -516,6 +599,13 @@ export default class VerificationFlow {
       if (!stepData.mathExpression) return false;
       const userAnswer = String(answer).trim();
       const expectedAnswer = String(stepData.mathExpression.result);
+      return userAnswer === expectedAnswer;
+    }
+
+    // TEXT_CHALLENGE: case-insensitive string comparison
+    if (session.currentStep === 'TEXT_CHALLENGE') {
+      const userAnswer = String(answer).trim().toLowerCase();
+      const expectedAnswer = String(stepData.expectedAnswer).trim().toLowerCase();
       return userAnswer === expectedAnswer;
     }
 
@@ -627,16 +717,20 @@ export default class VerificationFlow {
       durationMs = 3600_000; // 1 hour
     }
 
-    if (interaction.guild?.members?.me?.permissions.has('ModerateMembers')) {
-      interaction.guild.members.fetch(session.userId).then((member) => {
-        if (member.moderatable) {
-          member.timeout(durationMs, `Security violation: Failed verification (${severity} severity)`).catch((error) => {
-            console.error('[VerificationFlow] Failed to timeout user:', error.message);
-          });
-        }
-      }).catch((error) => {
-        console.error('[VerificationFlow] Failed to fetch member for timeout:', error.message);
-      });
+    try {
+      if (interaction?.guild?.members?.me?.permissions.has('ModerateMembers')) {
+        interaction.guild.members.fetch(session.userId).then((member) => {
+          if (member?.moderatable) {
+            member.timeout(durationMs, `[Gateway] Security: Failed verification (${severity})`).catch((error) => {
+              console.error('[VerificationFlow] Failed to timeout user:', error.message);
+            });
+          }
+        }).catch((error) => {
+          console.error('[VerificationFlow] Failed to fetch member for timeout:', error.message);
+        });
+      }
+    } catch (error) {
+      console.error('[VerificationFlow] Timeout process error:', error.message);
     }
 
     this.logSecurityEvent('user_timeout', {

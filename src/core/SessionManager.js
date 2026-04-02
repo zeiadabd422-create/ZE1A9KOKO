@@ -160,6 +160,68 @@ export default class SessionManager {
     return Array.from(this.sessionsById.entries());
   }
 
+  getAllSessionsList() {
+    this.cleanupExpired();
+    return Array.from(this.sessionsById.values());
+  }
+
+  getSessionsByUser(userId) {
+    this.cleanupExpired();
+    return this.getSessionByUser(userId);
+  }
+
+  createSession(userId, mode = 'NORMAL', options = {}) {
+    const normalizedMode = normalizeMode(mode);
+    const config = DEFAULT_MODE_SETTINGS[normalizedMode];
+    const steps = options.steps || (normalizedMode === 'HARD' ? shuffleArray(config.steps) : [...config.steps]);
+    const timeoutMs = Number(options.timeoutMs ?? config.timeoutMs);
+    const maxAttempts = Number(options.maxAttempts ?? config.maxAttempts);
+    const stepTimeoutMs = Number(options.stepTimeoutMs ?? config.stepTimeoutMs);
+    const sessionId = buildSessionId(userId);
+
+    const session = {
+      sessionId,
+      userId,
+      mode: normalizedMode,
+      steps,
+      stepIndex: 0,
+      currentStep: steps[0],
+      attemptsLeft: maxAttempts,
+      maxAttempts,
+      timeoutMs,
+      stepTimeoutMs,
+      expiresAt: Date.now() + timeoutMs,
+      currentStepStartedAt: Date.now(),
+      currentStepExpiresAt: Date.now() + stepTimeoutMs,
+      startedAt: Date.now(),
+      status: 'pending',
+      failureReason: null,
+      metadata: {
+        suspiciousFlags: [],
+        stepHistory: [],
+      },
+      lastInteractionAt: 0,
+      trustAdjustment: 0,
+      ...options.initialData,
+    };
+
+    this.cleanupExpired();
+    if (this.sessionsByUser.size >= this.maxSessions) {
+      this.cleanupOldestSessions();
+    }
+
+    if (options.persist !== false) {
+      this.sessionsByUser.set(userId, session);
+      this.sessionsById.set(sessionId, session);
+    }
+
+    return session;
+  }
+
+  destroySession(sessionId) {
+    return this.deleteSession(sessionId);
+  }
+
   isRateLimited(userId, cooldownMs = 1_200) {
     const session = this.getSessionByUser(userId);
     if (!session) return false;

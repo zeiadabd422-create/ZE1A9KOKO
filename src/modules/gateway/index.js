@@ -287,54 +287,61 @@ export default function GatewayModule(client) {
     const config = await loadConfig(member.guild.id);
     if (!config?.enabled) return;
 
-    // Isolation hardening - remove all permissions before verification
+    // إضافة دور unverified
     if (config.unverifiedRole) {
       try {
         const unverifiedRole = member.guild.roles.cache.get(config.unverifiedRole);
         if (unverifiedRole && member.guild.members.me.permissions.has('ManageRoles')) {
-          await member.roles.add(unverifiedRole);
+          await member.roles.add(unverifiedRole, '[Gateway] Unverified member');
         }
       } catch (error) {
         console.warn('[GatewayModule] Failed to add unverified role:', error.message);
       }
     }
 
-    // Send DM entry prompt
-    const dmPayload = {
-      embeds: [{
-        title: '👋 Welcome to the Server!',
-        description: 'To access the server, please type **"start"** in this DM to begin verification.',
-        color: 0x3498db,
-        footer: { text: 'This is a one-time process for security.' },
-      }],
-    };
-
+    // إرسال رسالة DM الترحيب
     try {
-      await sendRichMessage(member, dmPayload, {});
-    } catch (error) {
-      console.warn('[GatewayModule] DM failed, using fallback channel:', error.message);
-      // Fallback to verification channel
-      const fallbackChannel = member.guild.channels.cache.find((c) => c.name.toLowerCase().includes('verification') && c.isTextBased());
-      if (fallbackChannel) {
-        const fallbackPayload = {
-          content: `${member}`,
-          embeds: [{
-            title: '👋 Welcome!',
-            description: 'Please enable DMs or click below to start verification.',
+      const dmEmbed = {
+        title: '👋 أهلاً في السيرفر!',
+        description: 'لتتمكن من الوصول للسيرفر، اكتب **"ابدأ"** في هذه الرسالة الخاصة للبدء بالتحقق.',
+        color: 0x3498db,
+        footer: { text: 'هذه عملية مرة واحدة فقط للأمان.' },
+      };
+      
+      const dmMessage = {
+        embeds: [dmEmbed],
+      };
+      
+      await member.send(dmMessage).catch((error) => {
+        console.warn('[GatewayModule] Failed to send DM to member:', error.message);
+        // Fallback to verification channel
+        const fallbackChannel = member.guild.channels.cache.find(
+          (c) => c.name.toLowerCase().includes('verification') && c.isTextBased()
+        );
+        if (fallbackChannel) {
+          const fallbackEmbed = {
+            title: '👋 مرحباً!',
+            description: 'يرجى تفعيل الرسائل الخاصة أو اضغط الزر بالأسفل للبدء بالتحقق.',
             color: 0x3498db,
-          }],
-          components: [{
-            type: 1,
+          };
+          
+          fallbackChannel.send({
+            content: `${member}`,
+            embeds: [fallbackEmbed],
             components: [{
-              type: 2,
-              label: 'Start Verification',
-              customId: `gateway_entry_${member.id}`,
-              style: 1, // Primary
+              type: 1,
+              components: [{
+                type: 2,
+                label: 'ابدأ التحقق',
+                custom_id: `gateway_entry_${member.id}`,
+                style: 3,
+              }],
             }],
-          }],
-        };
-        await sendRichMessage(fallbackChannel, fallbackPayload, {});
-      }
+          }).catch(() => {});
+        }
+      });
+    } catch (error) {
+      console.warn('[GatewayModule] DM handler error:', error.message);
     }
 
     dashboardManager?.trackGuild(member.guild.id);
@@ -454,57 +461,90 @@ export default function GatewayModule(client) {
   }
 
   async function handleGatewayInteraction(interaction) {
-    if (!interaction.customId?.startsWith('gateway_v4_') && !interaction.customId?.startsWith('gateway_entry_')) return false;
-    if (!interaction.guild || !interaction.member) {
-      await interaction.reply({ content: 'Unable to resolve your member state.', ephemeral: true }).catch(() => {});
+    // معالجة زرار البداية من الخاص
+    if (interaction.customId?.startsWith('gateway_start_verify_')) {
+      const userId = interaction.customId.replace('gateway_start_verify_', '');
+      if (userId !== interaction.user.id) {
+        await interaction.reply({ content: 'هذا الزر ليس لك.', ephemeral: true }).catch(() => {});
+        return true;
+      }
+
+      try {
+        await interaction.deferReply({ ephemeral: true }).catch(() => {});
+        const member = await interaction.guild?.members.fetch(interaction.user.id).catch(() => null);
+        if (member) {
+          await startVerification(member);
+          await interaction.editReply({ content: '✅ تم بدء التحقق! تحقق من الرسائل الخاصة.' }).catch(() => {});
+        } else {
+          await interaction.editReply({ content: '❌ خطأ: لم يتمكن من الحصول على بيانات العضو.' }).catch(() => {});
+        }
+      } catch (error) {
+        console.error('[GatewayModule] Start verification error:', error.message);
+        await interaction.editReply({ content: '❌ حدث خطأ أثناء بدء التحقق.' }).catch(() => {});
+      }
       return true;
     }
 
-    // Handle entry button
-    if (interaction.customId.startsWith('gateway_entry_')) {
+    // معالجة زرار الدخول (من Channel fallback)
+    if (interaction.customId?.startsWith('gateway_entry_')) {
       const userId = interaction.customId.replace('gateway_entry_', '');
       if (userId !== interaction.user.id) {
-        await interaction.reply({ content: 'This is not for you.', ephemeral: true }).catch(() => {});
+        await interaction.reply({ content: 'هذا الزر ليس لك.', ephemeral: true }).catch(() => {});
         return true;
       }
 
       await interaction.deferReply({ ephemeral: true }).catch(() => {});
       await startVerification(interaction.member);
-      await interaction.editReply({ content: '✅ Verification started! Check your DMs.' }).catch(() => {});
+      await interaction.editReply({ content: '✅ تم بدء التحقق! تحقق من الرسائل الخاصة.' }).catch(() => {});
       return true;
     }
 
-    if (interaction.customId.startsWith('gateway_dashboard_')) {
-      return dashboardManager.handleControlAction(interaction);
+    // معالجة زرار لوحة التحكم
+    if (interaction.customId?.startsWith('gateway_dashboard_')) {
+      return dashboardManager?.handleControlAction(interaction) || false;
     }
 
+    // التحقق من الأساسيات
+    if (!interaction.guild || !interaction.member) {
+      await interaction.reply({ content: 'لم يتمكن من تحديد حالة العضو.', ephemeral: true }).catch(() => {});
+      return true;
+    }
+
+    if (!interaction.customId?.startsWith('gateway_v4_')) {
+      return false;
+    }
+
+    // استخراج بيانات التحقق
     const flowData = verificationFlow.extractInteractionData(interaction);
     if (!flowData.sessionId) {
-      await interaction.reply({ content: 'Invalid verification token.', ephemeral: true }).catch(() => {});
+      await interaction.reply({ content: '❌ رمز التحقق غير صحيح.', ephemeral: true }).catch(() => {});
       return true;
     }
 
+    // الحصول على الـ session
     const session = verificationFlow.getFlowById(flowData.sessionId);
     if (!session) {
-      await interaction.reply({ content: 'This verification session is no longer valid.', ephemeral: true }).catch(() => {});
+      await interaction.reply({ content: '❌ جلسة التحقق لم تعد صحيحة.', ephemeral: true }).catch(() => {});
       return true;
     }
 
+    // التحقق من الملكية
     if (session.userId !== interaction.user.id) {
-      await interaction.reply({ content: 'This verification flow is not yours.', ephemeral: true }).catch(() => {});
+      await interaction.reply({ content: '❌ هذا التحقق ليس لك.', ephemeral: true }).catch(() => {});
       return true;
     }
 
-    // Anti-spam check: too many interactions in short window
+    // Anti-spam check: عدد التفاعلات الكثيرة في وقت قصير
     if (gatewayState.checkInteractionSpam(interaction.user.id)) {
-      await interaction.reply({ content: '🚫 You are interacting too frequently. Please slow down.', ephemeral: true }).catch(() => {});
-      // Log spam attempt
+      await interaction.reply({ content: '🚫 أنت تتفاعل بسرعة كبيرة. يرجى التمهل.', ephemeral: true }).catch(() => {});
+      
+      // تسجيل محاولة spam
       await SecurityLog.create({
         guildId: interaction.guild.id,
         userId: interaction.user.id,
         eventType: 'interaction_spam',
         severity: 'medium',
-        reason: 'Too many interactions detected',
+        reason: 'تم اكتشاف تفاعلات كثيرة في فترة قصيرة',
         metadata: { sessionId: session?.sessionId },
       }).catch(() => {});
       return true;
@@ -512,17 +552,22 @@ export default function GatewayModule(client) {
 
     gatewayState.recordInteraction(interaction.user.id);
 
+    // Rate limiting
     if (verificationFlow.sessionManager.isRateLimited(interaction.user.id)) {
-      await interaction.reply({ content: 'Please wait a moment before interacting again.', ephemeral: true }).catch(() => {});
+      await interaction.reply({ content: 'يرجى الانتظار قليلاً قبل التفاعل مرة أخرى.', ephemeral: true }).catch(() => {});
       return true;
     }
 
     verificationFlow.sessionManager.touchInteraction(interaction.user.id);
-    await interaction.deferUpdate().catch(() => {});
+    
+    try {
+      await interaction.deferUpdate().catch(() => {});
+    } catch {}
 
     const config = await loadConfig(interaction.guild.id);
     const antiRaidStatus = antiRaidMonitor.getRaidStatus(interaction.guild.id);
 
+    // معالجة التفاعل
     const result = verificationFlow.processInteraction(interaction);
     const activeSession = result.session || session;
     const computedRisk = activeSession?.risk || { score: 0, level: 'EASY', color: '#2ecc71', reasons: [] };
@@ -545,13 +590,16 @@ export default function GatewayModule(client) {
       gatewayState.updateFailCount();
       dashboardManager?.recordFailedAttempt(interaction.guild.id);
       const payload = buildVisualPayload('verify_fail', config, buildContext(interaction.member, activeSession, computedRisk, antiRaidStatus));
-      if (activeSession?.config?.verification?.[activeSession.mode.toLowerCase()]?.kickOnFailure && interaction.guild.members.me?.permissions.has('KickMembers')) {
+      
+      const kickOnFail = activeSession?.initialData?.config?.verification?.[activeSession.mode.toLowerCase()]?.kickOnFailure;
+      if (kickOnFail && interaction.guild.members.me?.permissions.has('KickMembers')) {
         interaction.guild.members.fetch(activeSession.userId).then((guildMember) => {
           if (guildMember.kickable) {
-            guildMember.kick('Failed verification flow.').catch(() => {});
+            guildMember.kick('[Gateway] فشل التحقق').catch(() => {});
           }
         }).catch(() => {});
       }
+      
       await animateVerification(interaction, payload);
       return true;
     }
@@ -569,6 +617,7 @@ export default function GatewayModule(client) {
       return true;
     }
 
+    // Default fallback
     const payload = buildVisualPayload('verify_fail', config, buildContext(interaction.member, activeSession, computedRisk, antiRaidStatus));
     await interaction.editReply(payload).catch(() => {});
     return true;
@@ -576,27 +625,39 @@ export default function GatewayModule(client) {
 
   async function handleButtonInteraction(interaction) {
     if (!interaction.isButton()) return false;
-    return handleGatewayInteraction(interaction);
+    try {
+      return await handleGatewayInteraction(interaction);
+    } catch (error) {
+      console.error('[GatewayModule] Button interaction error:', error);
+      return true; // Mark as handled even on error
+    }
   }
 
   async function handleSelectMenuInteraction(interaction) {
     if (!interaction.isStringSelectMenu()) return false;
-    return handleGatewayInteraction(interaction);
+    try {
+      return await handleGatewayInteraction(interaction);
+    } catch (error) {
+      console.error('[GatewayModule] Select menu interaction error:', error);
+      return true; // Mark as handled even on error
+    }
   }
 
   async function observeMessage(message) {
     if (!message.guild && !message.author.bot) {
-      // DM message
-      if (message.content.toLowerCase().trim() === 'start') {
+      // رسالة في الخاص - عند كتابة "ابدأ"
+      if (message.content.toLowerCase().trim() === 'ابدأ' || message.content.toLowerCase().trim() === 'start') {
+        // منع spam في بداية التحقق
         if (gatewayState.checkDmSpam(message.author.id)) {
-          await message.reply('🚫 Too many attempts. Please wait a moment.').catch(() => {});
+          await message.reply('🚫 عدد محاولات كثير. يرجى الانتظار قليلاً.').catch(() => {});
           return;
         }
         gatewayState.recordDmAttempt(message.author.id);
 
+        // إرسال زرار "ابدأ التحقق"
         const embed = {
-          title: '🔐 Ready to Verify',
-          description: 'Click the button below to start your verification process.',
+          title: '🔐 جاهز للتحقق',
+          description: 'اضغط على الزر بالأسفل لبدء عملية التحقق.',
           color: 0x2ecc71,
         };
 
@@ -604,16 +665,18 @@ export default function GatewayModule(client) {
           type: 1,
           components: [{
             type: 2,
-            label: 'Start Verification',
-            customId: `gateway_entry_${message.author.id}`,
-            style: 3, // Success
+            label: 'ابدأ التحقق',
+            custom_id: `gateway_start_verify_${message.author.id}`,
+            style: 3, // Success (Green)
           }],
         }];
 
-        await message.reply({ embeds: [embed], components }).catch(() => {});
+        await message.reply({ embeds: [embed], components }).catch((err) => {
+          console.error('[GatewayModule] Failed to send start button:', err.message);
+        });
       }
     } else if (message.guild) {
-      // Guild message
+      // رسالة في السيرفر
       await antiRaidMonitor.observeMessage(message);
       const config = await loadConfig(message.guild.id);
       const riskUpdate = updateRisk(message.member, { eventType: 'message', thresholds: config?.riskThresholds });
@@ -636,6 +699,21 @@ export default function GatewayModule(client) {
     handleMemberAdd,
     handleButtonInteraction,
     handleSelectMenuInteraction,
+    handleModalSubmit: async (interaction) => {
+      try {
+        // معالجة Modal submissions من verification
+        if (!interaction.isModalSubmit?.()) return false;
+        
+        // يجب التحقق من أن هذا الـ modal يتعلق بـ gateway
+        if (!interaction.customId?.startsWith('gateway_v4_')) return false;
+        
+        // معالجة كـ gateway interaction عادي
+        return await handleGatewayInteraction(interaction);
+      } catch (error) {
+        console.error('[GatewayModule] Modal submission error:', error);
+        return true;
+      }
+    },
     observeMessage,
     loadConfig,
     saveVisualTemplate,
