@@ -1,5 +1,7 @@
 import XPManager from '../modules/leveling/XPManager.js';
 import { EmbedBuilder } from 'discord.js';
+import { MAGIC_WORDS } from '../utils/normalizeText.js';
+import { ThreadVerificationSystem } from '../core/ThreadVerificationSystem.js';
 
 const xpManager = new XPManager();
 
@@ -7,11 +9,35 @@ export default {
   name: 'messageCreate',
   async execute(message) {
     try {
-      // تجاهل رسائل الـ bot و الخاصة بدون معالجة خاصة
+      // تجاهل رسائل الـ bot
       if (message.author.bot) return;
 
-      // معالجة الرسائل الخاصة من خلال gateway
+      // معالجة الرسائل الخاصة (DM) - Thread Verification
       if (!message.guild) {
+        if (MAGIC_WORDS.isStart(message.content)) {
+          try {
+            const result = await ThreadVerificationSystem.startVerificationFromDM(
+              message.author,
+              message.client
+            );
+
+            if (result?.error === 'session_exists') {
+              await message.reply({
+                content: '⚠️ عندك جلسة تحقق مفتوحة بالفعل. يرجى إكمالها أو الانتظار.',
+              }).catch(() => {});
+            } else if (result?.error) {
+              await message.reply({
+                content: '❌ حدث خطأ في إنشاء جلسة التحقق. يرجى المحاولة لاحقا.',
+              }).catch(() => {});
+            } else if (result?.thread) {
+              // Success - message sent in thread
+            }
+          } catch (error) {
+            console.error('[messageCreate] Thread verification error:', error);
+          }
+        }
+
+        // معالجة الرسائل الخاصة من خلال gateway
         if (message.client?.gateway?.observeMessage) {
           try {
             await message.client.gateway.observeMessage(message);

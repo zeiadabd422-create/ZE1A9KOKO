@@ -118,7 +118,7 @@ export default function GatewayModule(client) {
       }
       const entry = interactionFrequency.get(userId);
       entry.timestamps = entry.timestamps.filter((ts) => ts > now - windowMs);
-      return entry.timestamps.length >= spamThreshold;
+      return entry.timestamps.length;
     },
     recordInteraction(userId) {
       const now = Date.now();
@@ -301,31 +301,34 @@ export default function GatewayModule(client) {
 
     // إرسال رسالة DM الترحيب
     try {
-      const dmEmbed = {
-        title: '👋 أهلاً في السيرفر!',
-        description: 'لتتمكن من الوصول للسيرفر، اكتب **"ابدأ"** في هذه الرسالة الخاصة للبدء بالتحقق.',
-        color: 0x3498db,
-        footer: { text: 'هذه عملية مرة واحدة فقط للأمان.' },
-      };
+      const dmMessage = config?.visualTemplates?.welcome && Object.keys(config.visualTemplates.welcome).length > 0
+        ? config.visualTemplates.welcome
+        : {
+            embeds: [
+              {
+                title: '👋 أهلاً في السيرفر!',
+                description: 'لتتمكن من الوصول للسيرفر، اكتب **"ابدأ"** في هذه الرسالة الخاصة للبدء بالتحقق.',
+                color: 0x3498db,
+                footer: { text: 'هذه عملية مرة واحدة فقط للأمان.' },
+              },
+            ],
+          };
       
-      const dmMessage = {
-        embeds: [dmEmbed],
-      };
-      
-      await member.send(dmMessage).catch((error) => {
+      await member.send(dmMessage).catch(async (error) => {
         console.warn('[GatewayModule] Failed to send DM to member:', error.message);
-        // Fallback to verification channel
-        const fallbackChannel = member.guild.channels.cache.find(
-          (c) => c.name.toLowerCase().includes('verification') && c.isTextBased()
-        );
-        if (fallbackChannel) {
+
+        const channelId = config?.verificationChannel;
+        const fallbackChannel = channelId ? member.guild.channels.cache.get(channelId) : null;
+        const candidate = fallbackChannel || member.guild.channels.cache.find((c) => c.name.toLowerCase().includes('verification') && c.isTextBased());
+
+        if (candidate) {
           const fallbackEmbed = {
             title: '👋 مرحباً!',
-            description: 'يرجى تفعيل الرسائل الخاصة أو اضغط الزر بالأسفل للبدء بالتحقق.',
+            description: 'من فضلك افتح الرسائل الخاصة ثم اضغط زر البداية أو اضغط هنا لبدء التحقق.',
             color: 0x3498db,
           };
-          
-          fallbackChannel.send({
+
+          await candidate.send({
             content: `${member}`,
             embeds: [fallbackEmbed],
             components: [{
@@ -389,6 +392,43 @@ export default function GatewayModule(client) {
     } catch (error) {
       console.warn('[GatewayModule] Failed to send verification start:', error.message);
     }
+  }
+
+  async function handleVerificationSuccess(member, session) {
+    if (!member || !member.guild) return;
+    const config = await loadConfig(member.guild.id);
+    const unverifiedRoleId = config?.unverifiedRole;
+    const verifiedRoleId = config?.verifiedRole;
+
+    try {
+      if (unverifiedRoleId && member.roles.cache.has(unverifiedRoleId)) {
+        await member.roles.remove(unverifiedRoleId, '[Gateway] Verification passed').catch(() => {});
+      }
+      if (verifiedRoleId) {
+        await member.roles.add(verifiedRoleId, '[Gateway] Verification passed').catch(() => {});
+      }
+    } catch (error) {
+      console.error('[GatewayModule] handleVerificationSuccess role update failed:', error.message);
+    }
+
+    await verificationFlow.sessionManager?.deleteSession?.(session?.sessionId);
+  }
+
+  async function handleVerificationFailure(member, session) {
+    if (!member || !member.guild) return;
+    const config = await loadConfig(member.guild.id);
+    const modeSettings = config?.verification?.[session?.mode?.toLowerCase()] || {};
+
+    if (modeSettings.kickOnFailure && member.guild.members.me?.permissions.has('KickMembers')) {
+      member.kick('[Gateway] Failed verification').catch(() => {});
+      return;
+    }
+
+    if (member.guild.members.me?.permissions.has('ModerateMembers')) {
+      member.timeout(90_000, '[Gateway] Failed verification').catch(() => {});
+    }
+
+    await verificationFlow.sessionManager?.deleteSession?.(session?.sessionId);
   }
 
   async function saveVisualTemplate(guildId, templateType, templatePayload) {
@@ -534,23 +574,21 @@ export default function GatewayModule(client) {
       return true;
     }
 
-    // Anti-spam check: عدد التفاعلات الكثيرة في وقت قصير
-    if (gatewayState.checkInteractionSpam(interaction.user.id)) {
-      await interaction.reply({ content: '🚫 أنت تتفاعل بسرعة كبيرة. يرجى التمهل.', ephemeral: true }).catch(() => {});
-      
-      // تسجيل محاولة spam
+    // Anti-spam soft limit: عد التفاعلات ولكن لا توقف العملية تماماً
+    const spamCount = gatewayState.checkInteractionSpam(interaction.user.id);
+    gatewayState.recordInteraction(interaction.user.id);
+    if (spamCount >= 5) {
+      await interaction.reply({ content: '⚠️ أنت تتفاعل بسرعة، الرجاء التمهل قليلاً.', ephemeral: true }).catch(() => {});
       await SecurityLog.create({
         guildId: interaction.guild.id,
         userId: interaction.user.id,
         eventType: 'interaction_spam',
-        severity: 'medium',
-        reason: 'تم اكتشاف تفاعلات كثيرة في فترة قصيرة',
-        metadata: { sessionId: session?.sessionId },
+        severity: 'low',
+        reason: 'Soft limit reached for rapid interactions',
+        metadata: { sessionId: session?.sessionId, spamCount },
       }).catch(() => {});
-      return true;
+      // allow continued processing with hardened checks.
     }
-
-    gatewayState.recordInteraction(interaction.user.id);
 
     // Rate limiting
     if (verificationFlow.sessionManager.isRateLimited(interaction.user.id)) {
@@ -590,17 +628,8 @@ export default function GatewayModule(client) {
       gatewayState.updateFailCount();
       dashboardManager?.recordFailedAttempt(interaction.guild.id);
       const payload = buildVisualPayload('verify_fail', config, buildContext(interaction.member, activeSession, computedRisk, antiRaidStatus));
-      
-      const kickOnFail = activeSession?.initialData?.config?.verification?.[activeSession.mode.toLowerCase()]?.kickOnFailure;
-      if (kickOnFail && interaction.guild.members.me?.permissions.has('KickMembers')) {
-        interaction.guild.members.fetch(activeSession.userId).then((guildMember) => {
-          if (guildMember.kickable) {
-            guildMember.kick('[Gateway] فشل التحقق').catch(() => {});
-          }
-        }).catch(() => {});
-      }
-      
       await animateVerification(interaction, payload);
+      await handleVerificationFailure(interaction.member, activeSession).catch(() => {});
       return true;
     }
 
@@ -695,19 +724,43 @@ export default function GatewayModule(client) {
     gatewayState.checkSelfRecovery();
   }, gatewayState.recoveryInterval);
 
+  async function setConfig(guildId, updates = {}) {
+    if (!guildId) return null;
+    const config = await GatewayConfig.findOneAndUpdate({ guildId }, { $set: updates }, { new: true, upsert: true });
+    configCache.set(guildId, config);
+    return config;
+  }
+
+  async function getStatus(guildId) {
+    const config = await loadConfig(guildId);
+    const sessions = verificationFlow.sessionManager.getAllSessionsList();
+    const guildSessions = sessions.filter((s) => s.initialData?.guildId === guildId);
+    const raidStatus = antiRaidMonitor.getRaidStatus(guildId);
+    return {
+      guildId,
+      enabled: config?.enabled ?? false,
+      sessions: guildSessions.length,
+      activeSessions: guildSessions.filter((s) => s.status === 'pending').length,
+      raidStatus,
+    };
+  }
+
+  async function startVerificationForUser(user, guild) {
+    if (!user || !guild) return null;
+    const member = await guild.members.fetch(user.id).catch(() => null);
+    if (!member) return null;
+    await startVerification(member);
+    return member;
+  }
+
   return {
     handleMemberAdd,
     handleButtonInteraction,
     handleSelectMenuInteraction,
     handleModalSubmit: async (interaction) => {
       try {
-        // معالجة Modal submissions من verification
         if (!interaction.isModalSubmit?.()) return false;
-        
-        // يجب التحقق من أن هذا الـ modal يتعلق بـ gateway
         if (!interaction.customId?.startsWith('gateway_v4_')) return false;
-        
-        // معالجة كـ gateway interaction عادي
         return await handleGatewayInteraction(interaction);
       } catch (error) {
         console.error('[GatewayModule] Modal submission error:', error);
@@ -720,6 +773,9 @@ export default function GatewayModule(client) {
     getVisualTemplate,
     simulateFlow,
     startVerification,
+    startVerificationForUser,
+    setConfig,
+    getStatus,
     getSecurityLogs: (guildId, userId) => verificationFlow.getSecurityLogs(guildId, userId),
   };
 }

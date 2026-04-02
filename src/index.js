@@ -6,6 +6,7 @@ import loadEvents from './loaders/events.js';
 import loadCommands from './loaders/commands.js';
 import TaskScheduler from './core/TaskScheduler.js';
 import { startApi } from './api.js';
+import { initializeThreadVerificationIntegration, cleanupThreadVerification } from './core/ThreadVerificationIntegration.js';
 
 // 1. تحميل الإعدادات فوراً
 dotenv.config();
@@ -65,6 +66,10 @@ async function bootstrap() {
     await loadCommands(client);
     console.log('[2/4] LOADERS: All systems loaded.');
 
+    // ب1. تهيئة نظام التحقق عبر Threads
+    initializeThreadVerificationIntegration(client);
+    console.log('[2/4.1] THREAD-VERIFICATION: Initialized.');
+
     // ج. تشغيل المجدول الزمني (Scheduler)
     const scheduler = new TaskScheduler(client);
     scheduler.start();
@@ -85,5 +90,20 @@ async function bootstrap() {
 }
 
 bootstrap();
+
+// Graceful shutdown
+process.on('SIGINT', async () => {
+  console.log('\n[SHUTDOWN] Received SIGINT signal...');
+  cleanupThreadVerification();
+  client.destroy();
+  process.exit(0);
+});
+
+process.on('SIGTERM', async () => {
+  console.log('\n[SHUTDOWN] Received SIGTERM signal...');
+  cleanupThreadVerification();
+  client.destroy();
+  process.exit(0);
+});
 
 export default client;

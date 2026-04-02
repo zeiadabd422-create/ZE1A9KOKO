@@ -130,9 +130,15 @@ export default class SessionManager {
 
   cleanupExpired() {
     const now = Date.now();
+    const bufferMs = 12_000; // guard buffer during active interaction
     const expiredIds = [];
     for (const [sessionId, session] of this.sessionsById.entries()) {
-      if (session.expiresAt <= now || session.currentStepExpiresAt <= now) {
+      // do not remove sessions if they were active in last 15 seconds
+      if (session.lastInteractionAt && now - session.lastInteractionAt < 15_000) {
+        continue;
+      }
+
+      if (session.expiresAt <= now - bufferMs || session.currentStepExpiresAt <= now - bufferMs) {
         expiredIds.push(sessionId);
       }
     }

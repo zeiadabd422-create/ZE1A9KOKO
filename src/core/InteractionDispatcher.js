@@ -57,35 +57,56 @@ async function handleCommandInteraction(interaction) {
 }
 
 async function handleButtonInteraction(interaction) {
-  const gateway = interaction.client?.gateway;
-  if (gateway?.handleButtonInteraction) {
-    try {
+  try {
+    const gateway = interaction.client?.gateway;
+    if (gateway?.handleButtonInteraction) {
       const handled = await gateway.handleButtonInteraction(interaction);
       if (handled) {
-        return true; // Gateway handled it
+        return true;
       }
-    } catch (error) {
-      console.error('[InteractionDispatcher] Gateway button handler failed:', error);
-      return true; // Mark as handled even on error to prevent Shop handler
     }
-  }
 
-  // Try shop handler only if gateway didn't handle it
-  const shopHandled = await handleShopButton(interaction);
-  return shopHandled ? true : false;
+    const shopHandled = await handleShopButton(interaction);
+    if (shopHandled) {
+      return true;
+    }
+
+    // fallback for unhandled button
+    if (interaction.isRepliable()) {
+      await interaction.reply({ content: 'Button action not handled.', ephemeral: true }).catch(() => {});
+    }
+    return false;
+  } catch (error) {
+    console.error('[InteractionDispatcher] handleButtonInteraction error:', error);
+    if (interaction.isRepliable()) {
+      await interaction.reply({ content: 'Internal error handling button.', ephemeral: true }).catch(() => {});
+    }
+    return true;
+  }
 }
 
 async function handleSelectMenuInteraction(interaction) {
-  const gateway = interaction.client?.gateway;
-  if (gateway?.handleSelectMenuInteraction) {
-    try {
+  try {
+    const gateway = interaction.client?.gateway;
+    if (gateway?.handleSelectMenuInteraction) {
       const handled = await gateway.handleSelectMenuInteraction(interaction);
-      if (handled) return;
-    } catch (error) {
-      console.error('[InteractionDispatcher] gateway select menu handler failed:', error);
+      if (handled) return true;
     }
-  }
 
-  const shopHandled = await handleShopSelect(interaction);
-  if (shopHandled) return;
+    const shopHandled = await handleShopSelect(interaction);
+    if (shopHandled) {
+      return true;
+    }
+
+    if (interaction.isRepliable()) {
+      await interaction.reply({ content: 'Select menu action not handled.', ephemeral: true }).catch(() => {});
+    }
+    return false;
+  } catch (error) {
+    console.error('[InteractionDispatcher] handleSelectMenuInteraction error:', error);
+    if (interaction.isRepliable()) {
+      await interaction.reply({ content: 'Internal error handling select menu.', ephemeral: true }).catch(() => {});
+    }
+    return true;
+  }
 }
