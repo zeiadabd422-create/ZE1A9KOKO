@@ -6,6 +6,7 @@ const GatewaySchema = new mongoose.Schema(
     enabled: { type: Boolean, default: true },
     verifiedRole: { type: String, default: '' },
     unverifiedRole: { type: String, default: '' },
+    verificationChannel: { type: String, default: '' }, // Thread-based verification channel
     antiRaid: {
       enabled: { type: Boolean, default: true },
       maxJoinBurst: { type: Number, default: 4 },

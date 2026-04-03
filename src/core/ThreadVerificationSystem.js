@@ -4,8 +4,6 @@ import GatewayConfig from '../modules/gateway/schema.js';
 
 export class ThreadVerificationSystem {
   static async startVerificationFromDM(user, client) {
-    if (!user.isDMChannel && !user.isDM) return null;
-
     const guilds = client.guilds.cache;
     if (guilds.size === 0) return null;
 
@@ -21,7 +19,7 @@ export class ThreadVerificationSystem {
       return null;
     }
 
-    if (!channel.permissionsFor(guild.members.me).has(PermissionFlagsBits.CreatePublicThreads)) {
+    if (!channel.permissionsFor(guild.members.me).has(PermissionFlagsBits.CreatePrivateThreads)) {
       return null;
     }
 

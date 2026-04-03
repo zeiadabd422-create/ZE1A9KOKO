@@ -672,50 +672,6 @@ export default function GatewayModule(client) {
     }
   }
 
-  async function observeMessage(message) {
-    if (!message.guild && !message.author.bot) {
-      // رسالة في الخاص - عند كتابة "ابدأ"
-      if (message.content.toLowerCase().trim() === 'ابدأ' || message.content.toLowerCase().trim() === 'start') {
-        // منع spam في بداية التحقق
-        if (gatewayState.checkDmSpam(message.author.id)) {
-          await message.reply('🚫 عدد محاولات كثير. يرجى الانتظار قليلاً.').catch(() => {});
-          return;
-        }
-        gatewayState.recordDmAttempt(message.author.id);
-
-        // إرسال زرار "ابدأ التحقق"
-        const embed = {
-          title: '🔐 جاهز للتحقق',
-          description: 'اضغط على الزر بالأسفل لبدء عملية التحقق.',
-          color: 0x2ecc71,
-        };
-
-        const components = [{
-          type: 1,
-          components: [{
-            type: 2,
-            label: 'ابدأ التحقق',
-            custom_id: `gateway_start_verify_${message.author.id}`,
-            style: 3, // Success (Green)
-          }],
-        }];
-
-        await message.reply({ embeds: [embed], components }).catch((err) => {
-          console.error('[GatewayModule] Failed to send start button:', err.message);
-        });
-      }
-    } else if (message.guild) {
-      // رسالة في السيرفر
-      await antiRaidMonitor.observeMessage(message);
-      const config = await loadConfig(message.guild.id);
-      const riskUpdate = updateRisk(message.member, { eventType: 'message', thresholds: config?.riskThresholds });
-      if (riskUpdate.risk.level === 'HARD' || riskUpdate.trustLevel === 'LOW') {
-        gatewayState.hardMode = true;
-      }
-      dashboardManager?.trackGuild(message.guild.id);
-    }
-  }
-
   dashboardManager = new DashboardManager(client, verificationFlow.sessionManager, antiRaidMonitor, gatewayApi);
   gatewayApi.handleDashboardAction = handleDashboardAction;
 
@@ -767,7 +723,6 @@ export default function GatewayModule(client) {
         return true;
       }
     },
-    observeMessage,
     loadConfig,
     saveVisualTemplate,
     getVisualTemplate,

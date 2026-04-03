@@ -36,27 +36,10 @@ export default {
             console.error('[messageCreate] Thread verification error:', error);
           }
         }
-
-        // معالجة الرسائل الخاصة من خلال gateway
-        if (message.client?.gateway?.observeMessage) {
-          try {
-            await message.client.gateway.observeMessage(message);
-          } catch (error) {
-            console.error('[messageCreate] Gateway DM observer error:', error);
-          }
-        }
         return;
       }
 
-      // معالجة رسائل السيرفر
-      if (message.client?.gateway?.observeMessage) {
-        try {
-          await message.client.gateway.observeMessage(message);
-        } catch (error) {
-          console.error('[messageCreate] Gateway observer error:', error);
-        }
-      }
-
+      // معالجة رسائل السيرفر - XP فقط
       const member = message.member;
       if (!member) return;
 
