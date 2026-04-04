@@ -5,12 +5,17 @@ import { GatewayEngine } from '../../core/GatewayEngine.js';
  * Routes interactions from interactionCreate event to appropriate handlers
  */
 export class GatewayController {
-  constructor(client, channelManager, roleManager, dmHandler) {
+  constructor(client, channelManager, roleManager, gatewayEngine, dmHandler) {
+    if (!gatewayEngine) {
+      throw new Error('GatewayController requires a GatewayEngine instance');
+    }
+
     this.client = client;
-    this.engine = new GatewayEngine(client, channelManager, roleManager, dmHandler);
+    this.engine = gatewayEngine;
     this.channelManager = channelManager;
     this.roleManager = roleManager;
     this.dmHandler = dmHandler;
+    this.verificationFlow = gatewayEngine;
   }
 
   /**

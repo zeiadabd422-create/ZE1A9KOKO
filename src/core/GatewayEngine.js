@@ -29,6 +29,13 @@ export class GatewayEngine {
   }
 
   /**
+   * Attach DM handler after engine creation
+   */
+  setDMHandler(dmHandler) {
+    this.dmHandler = dmHandler;
+  }
+
+  /**
    * Start verification for a user
    */
   async startVerification(user, guild, interaction = null) {

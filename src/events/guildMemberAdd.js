@@ -6,13 +6,8 @@ export default {
   name: 'guildMemberAdd',
   async execute(member) {
     try {
-      // معالجة gateway في الأساس
-      if (member.client?.gateway?.handleMemberAdd) {
-        try {
-          await member.client.gateway.handleMemberAdd(member);
-        } catch (error) {
-          console.error('[guildMemberAdd] Gateway handler error:', error);
-        }
+      if (member.partial) {
+        await member.fetch();
       }
 
       // معالجة welcome module

@@ -23,33 +23,8 @@ function safeEvaluate(expression, context = {}) {
   if (/^[a-zA-Z_$][0-9a-zA-Z_$]*(\.[a-zA-Z_$][0-9a-zA-Z_$]*)*$/.test(expression.trim())) {
     return '';
   }
-
-  try {
-    const sandbox = {
-      ...context,
-      user: {
-        ...(context.user || {}),
-        hasRole: (roleId) => {
-          const roles = context.user?.roles || [];
-          if (Array.isArray(roles)) {
-            return roles.includes(roleId);
-          }
-          if (typeof roles === 'string') {
-            return roles === roleId;
-          }
-          return false;
-        },
-      },
-      guild: context.guild || {},
-      state: context.state,
-      context,
-    };
-    const fn = new Function('ctx', `with (ctx) { return (${expression}); }`);
-    return fn(sandbox);
-  } catch (error) {
-    console.warn('[VisualParser] safeEvaluate failed:', expression, error);
-    return '';
-  }
+  // Removed dynamic evaluation for safety. Only safe path lookups are allowed.
+  return '';
 }
 
 function interpolate(text, context = {}) {

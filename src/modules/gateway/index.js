@@ -17,17 +17,20 @@ export default async function initializeGateway(client) {
   const channelManager = new ChannelManager(client);
   const roleManager = new RoleManager(client);
   const gatewayEngine = new GatewayEngine(client, channelManager, roleManager);
-  const dmHandler = new DMHandler(keywordEngine, gatewayEngine);
+  const dmHandler = new DMHandler({ gatewayEngine });
+  gatewayEngine.setDMHandler(dmHandler);
 
-  // Create controller with all managers
-  const controller = new GatewayController(client, channelManager, roleManager, dmHandler);
+  // Create controller with engine and DM handler wired
+  const controller = new GatewayController(
+    client,
+    channelManager,
+    roleManager,
+    gatewayEngine,
+    dmHandler
+  );
 
-  // Attach to client for easy access
-  client.gateway = controller;
-  client.channelManager = channelManager;
-  client.roleManager = roleManager;
-  client.dmHandler = dmHandler;
-  client.keywordEngine = keywordEngine;
+  client.container = client.container || {};
+  client.container.gateway = controller;
 
   // Setup cleanup job for sessions
   setInterval(() => {

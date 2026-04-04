@@ -284,7 +284,7 @@ export default {
       }
 
       // Get gateway module
-      const gateway = interaction.client?.gateway;
+      const gateway = interaction.client?.container?.gateway;
       if (!gateway) {
         return interaction.reply({
           content: t(interaction, 'error_gateway'),

@@ -13,9 +13,8 @@ export const connectDatabase = async () => {
                 });
                     console.log("[INFO] Database connected successfully");
       } catch (error) {
-            console.error("[WARNING] Failed to connect to MongoDB (continuing with in-memory fallback):", error);
-                // Do not crash the bot if the database is unavailable.
-                // The GatewayConfigService will continue with safe in-memory fallback.
+            console.error("[ERROR] Failed to connect to MongoDB:", error);
+            throw error;
       }
 };
 

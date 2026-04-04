@@ -1,12 +1,27 @@
 import { handleButton as handleShopButton, handleSelectMenu as handleShopSelect } from './ShopInteractionHandler.js';
 
 export async function handleInteraction(interaction) {
-  if (interaction.isAutocomplete()) {
-    return handleAutocomplete(interaction);
+  const client = interaction.client;
+
+  // 1. Gateway أولاً
+  const gateway = client?.container?.gateway;
+  if (gateway) {
+    const handled = await gateway.handleInteraction(interaction);
+    if (handled) return;
   }
 
+  // 2. Commands
   if (interaction.isChatInputCommand()) {
-    return handleCommandInteraction(interaction);
+    const command = client.commands.get(interaction.commandName);
+    if (command) {
+      await command.execute(interaction);
+      return;
+    }
+  }
+
+  // 3. باقي الأنظمة هنا
+  if (interaction.isAutocomplete()) {
+    return handleAutocomplete(interaction);
   }
 
   if (interaction.isButton()) {
@@ -58,20 +73,11 @@ async function handleCommandInteraction(interaction) {
 
 async function handleButtonInteraction(interaction) {
   try {
-    const gateway = interaction.client?.gateway;
-    if (gateway?.handleButtonInteraction) {
-      const handled = await gateway.handleButtonInteraction(interaction);
-      if (handled) {
-        return true;
-      }
-    }
-
     const shopHandled = await handleShopButton(interaction);
     if (shopHandled) {
       return true;
     }
 
-    // fallback for unhandled button
     if (interaction.isRepliable()) {
       await interaction.reply({ content: 'Button action not handled.', ephemeral: true }).catch(() => {});
     }
@@ -87,12 +93,6 @@ async function handleButtonInteraction(interaction) {
 
 async function handleSelectMenuInteraction(interaction) {
   try {
-    const gateway = interaction.client?.gateway;
-    if (gateway?.handleSelectMenuInteraction) {
-      const handled = await gateway.handleSelectMenuInteraction(interaction);
-      if (handled) return true;
-    }
-
     const shopHandled = await handleShopSelect(interaction);
     if (shopHandled) {
       return true;

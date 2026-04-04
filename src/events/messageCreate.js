@@ -12,31 +12,24 @@ export default {
 
       // معالجة الرسائل الخاصة (DM) - Gateway Verification
       if (!message.guild) {
-        // Check if gateway module is available
-        if (message.client.dmHandler) {
-          const handled = await message.client.dmHandler.handleDM(message);
-          if (handled) {
-            // Try to start verification
-            try {
-              // Find guild for verification (use first guild user is in)
-              const mutualGuilds = message.client.guilds.cache.filter(
-                guild => guild.members.cache.has(message.author.id)
-              );
+        const gateway = message.client?.container?.gateway;
+        const handled = await gateway?.dmHandler?.handleDM(message);
+        if (handled) {
+          try {
+            const mutualGuilds = message.client.guilds.cache.filter(
+              guild => guild.members.cache.has(message.author.id)
+            );
 
-              if (mutualGuilds.size > 0) {
-                const guild = mutualGuilds.first();
-                const result = await message.client.gateway?.startVerification(
-                  message.author,
-                  guild
-                );
+            if (mutualGuilds.size > 0) {
+              const guild = mutualGuilds.first();
+              const result = await gateway.startVerification(message.author, guild);
 
-                if (!result?.success && !result?.queued) {
-                  console.error('[messageCreate] Verification start failed:', result);
-                }
+              if (!result?.success && !result?.queued) {
+                console.error('[messageCreate] Verification start failed:', result);
               }
-            } catch (error) {
-              console.error('[messageCreate] Gateway verification error:', error);
             }
+          } catch (error) {
+            console.error('[messageCreate] Gateway verification error:', error);
           }
         }
         return;

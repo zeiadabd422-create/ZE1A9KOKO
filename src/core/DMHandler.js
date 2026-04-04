@@ -1,10 +1,16 @@
+import { keywordEngine } from './KeywordEngine.js';
+
 /**
  * DMHandler - Manages DM verification workflow
  * Handles initial keyword verification and user notifications
  */
 export class DMHandler {
-  constructor(keywordEngine, gatewayEngine) {
-    this.keywordEngine = keywordEngine;
+  constructor({ keywordEngine: engine = keywordEngine, gatewayEngine } = {}) {
+    if (!gatewayEngine) {
+      throw new Error('DMHandler requires gatewayEngine');
+    }
+
+    this.keywordEngine = engine;
     this.gatewayEngine = gatewayEngine;
     this.dmThrottling = new Map(); // userId -> lastDMTime
     this.dmThrottleMs = 2000; // 2 seconds between DM responses

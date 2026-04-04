@@ -49,6 +49,7 @@ const client = new Client({
 });
 
 client.commands = new Collection();
+client.container = {};
 
 // 5. وظيفة الإقلاع الاحترافية (Bootstrap Sequence)
 async function bootstrap() {
