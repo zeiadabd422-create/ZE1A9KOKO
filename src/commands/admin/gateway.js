@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, PermissionFlagsBits, EmbedBuilder, ButtonBuilder, ButtonStyle, ActionRowBuilder } from 'discord.js';
-import GatewayConfig from '../../modules/gateway/schema.js';
+import { gatewayConfigService } from '../../services/GatewayConfigService.js';
 
 // =========================================
 //  CONSTANTS & LOCALIZATION
@@ -119,17 +119,14 @@ async function validateRoles(interaction, unverifiedRole, verifiedRole) {
   return errors;
 }
 
-async function loadOrCreateConfig(guildId) {
-  try {
-    let config = await GatewayConfig.findOne({ guildId });
-    if (!config) {
-      config = await GatewayConfig.create({ guildId, enabled: true });
-    }
-    return config;
-  } catch (error) {
-    console.error('[Gateway] Config load error:', error);
-    return null;
-  }
+async function getGuildConfig(guildId) {
+  // Get config from service with MongoDB persistence
+  return await gatewayConfigService.getConfig(guildId);
+}
+
+async function setGuildConfig(guildId, config) {
+  // Set config via service with MongoDB persistence
+  return await gatewayConfigService.setConfig(guildId, config);
 }
 
 async function getGuildStats(guildId) {
@@ -138,13 +135,13 @@ async function getGuildStats(guildId) {
   try {
     const guild = global.client?.guilds.cache.get(guildId);
     if (guild) {
-      const config = await loadOrCreateConfig(guildId);
+      const config = await getGuildConfig(guildId);
 
-      if (config?.verifiedRole) {
-        verified = guild.roles.cache.get(config.verifiedRole)?.members.size || 0;
+      if (config?.roles?.successRoleId) {
+        verified = guild.roles.cache.get(config.roles.successRoleId)?.members.size || 0;
       }
-      if (config?.unverifiedRole) {
-        unverified = guild.roles.cache.get(config.unverifiedRole)?.members.size || 0;
+      if (config?.roles?.failureRoleId) {
+        unverified = guild.roles.cache.get(config.roles.failureRoleId)?.members.size || 0;
       }
     }
   } catch (error) {
@@ -303,10 +300,7 @@ export default {
 
       // ===== SETUP GROUP =====
       if (subcommandGroup === 'setup') {
-        const config = await loadOrCreateConfig(guildId);
-        if (!config) {
-          return interaction.editReply(t(interaction, 'error_db'));
-        }
+        const config = await getGuildConfig(guildId);
 
         switch (subcommand) {
           // Setup Roles
@@ -319,9 +313,10 @@ export default {
               return interaction.editReply(errors.join('\n'));
             }
 
-            config.unverifiedRole = unverifiedRole.id;
-            config.verifiedRole = verifiedRole.id;
-            await config.save();
+            await gatewayConfigService.updateRoles(guildId, {
+              successRoleId: verifiedRole.id,
+              failureRoleId: unverifiedRole.id,
+            });
 
             return interaction.editReply({
               content: t(interaction, 'setup_roles_success', {
@@ -335,8 +330,7 @@ export default {
           case 'channel': {
             const channel = interaction.options.getChannel('verification_channel');
 
-            config.verificationChannel = channel.id;
-            await config.save();
+            await setGuildConfig(guildId, { 'settings.verificationChannel': channel.id });
 
             return interaction.editReply({
               content: t(interaction, 'setup_channel_success', {
@@ -388,7 +382,8 @@ export default {
               }
             }
 
-            await config.save();
+            await setGuildConfig(guildId, { visualTemplates: config.visualTemplates });
+
             return interaction.editReply({
               content: t(interaction, 'setup_messages_success'),
             });
@@ -399,8 +394,7 @@ export default {
             const mode = interaction.options.getString('mode');
             const stepsCount = interaction.options.getInteger('steps_count') || 3;
 
-            config.defaultMode = mode;
-            await config.save();
+            await setGuildConfig(guildId, { 'settings.difficulty': mode });
 
             return interaction.editReply({
               content: t(interaction, 'setup_flow_success', {
@@ -440,12 +434,18 @@ export default {
         }
 
         try {
-          await gateway.startVerificationForUser(user, interaction.guild);
+          const result = await gateway.startVerification(user, interaction.guild);
+
+          if (!result?.success && !result?.queued) {
+            return interaction.editReply({
+              content: '❌ Failed to start verification. Please try again.',
+            });
+          }
 
           return interaction.editReply({
-            content: t(interaction, 'start_success', {
-              user: user.tag,
-            }),
+            content: result.queued 
+              ? `⏳ User added to verification queue at position #${result.position}`
+              : t(interaction, 'start_success', { user: user.tag }),
           });
         } catch (error) {
           console.error('[Gateway] Start verification error:', error);
@@ -456,12 +456,7 @@ export default {
       // ===== STATUS COMMAND =====
       if (subcommand === 'status') {
         try {
-          const config = await loadOrCreateConfig(guildId);
-          if (!config) {
-            return interaction.editReply(t(interaction, 'error_db'));
-          }
-
-          const status = await gateway.getStatus(guildId);
+          const status = gateway.getStatus();
           const stats = await getGuildStats(guildId);
 
           const embed = new EmbedBuilder()
@@ -502,10 +497,10 @@ export default {
               {
                 name: '⚙️ Configuration',
                 value: [
-                  `**Mode**: ${config.defaultMode || 'EASY'}`,
-                  `**Verified Role**: ${config.verifiedRole ? `<@&${config.verifiedRole}>` : 'Not Set'}`,
-                  `**Unverified Role**: ${config.unverifiedRole ? `<@&${config.unverifiedRole}>` : 'Not Set'}`,
-                  `**Fallback Channel**: ${config.verificationChannel ? `<#${config.verificationChannel}>` : 'Not Set'}`,
+                  `**Mode**: ${config.settings?.difficulty || 'EASY'}`,
+                  `**Verified Role**: ${config.roles?.successRoleId ? `<@&${config.roles.successRoleId}>` : 'Not Set'}`,
+                  `**Unverified Role**: ${config.roles?.failureRoleId ? `<@&${config.roles.failureRoleId}>` : 'Not Set'}`,
+                  `**Fallback Channel**: ${config.settings?.verificationChannel ? `<#${config.settings.verificationChannel}>` : 'Not Set'}`,
                 ].join('\n'),
                 inline: false,
               },

@@ -1,243 +1,163 @@
-const DEFAULT_MODE_SETTINGS = {
-  EASY: {
-    timeoutMs: 240_000,
-    maxAttempts: 3,
-    steps: ['BUTTON_STEP'],
-    stepTimeoutMs: 30_000,
-  },
-  NORMAL: {
-    timeoutMs: 120_000,
-    maxAttempts: 3,
-    steps: ['BUTTON_STEP', 'TEXT_CHALLENGE'],
-    stepTimeoutMs: 20_000,
-  },
-  HARD: {
-    timeoutMs: 90_000,
-    maxAttempts: 3,
-    steps: ['BUTTON_STEP', 'TEXT_CHALLENGE', 'EMOJI_CHALLENGE'],
-    stepTimeoutMs: 15_000,
-  },
-};
-
-function shuffleArray(items = []) {
-  return items.slice().sort(() => Math.random() - 0.5);
-}
-
-function normalizeMode(mode) {
-  if (!mode || typeof mode !== 'string') return 'NORMAL';
-  const normalized = mode.trim().toUpperCase();
-  return DEFAULT_MODE_SETTINGS[normalized] ? normalized : 'NORMAL';
-}
-
-function buildSessionId(userId) {
-  return `session_${userId}_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
-}
-
-export default class SessionManager {
-  constructor(cleanupIntervalMs = 5_000, maxSessions = 150) {
-    this.sessionsByUser = new Map();
-    this.sessionsById = new Map();
-    this.cleanupInterval = setInterval(() => this.cleanupExpired(), cleanupIntervalMs);
-    this.maxSessions = Number(maxSessions) || 150;
-    if (typeof this.cleanupInterval.unref === 'function') {
-      this.cleanupInterval.unref();
-    }
+/**
+ * SessionManager - Single source of truth for user verification sessions
+ * Map-based storage with guaranteed no duplicates
+ */
+export class SessionManager {
+  constructor() {
+    this.sessions = new Map(); // userId -> Session
+    this.maxConcurrentSessions = 50;
   }
 
-  createSession(userId, mode = 'NORMAL', options = {}) {
-    const normalizedMode = normalizeMode(mode);
-    const config = DEFAULT_MODE_SETTINGS[normalizedMode];
-    const steps = options.steps || (normalizedMode === 'HARD' ? shuffleArray(config.steps) : [...config.steps]);
-    const timeoutMs = Number(options.timeoutMs ?? config.timeoutMs);
-    const maxAttempts = Number(options.maxAttempts ?? config.maxAttempts);
-    const stepTimeoutMs = Number(options.stepTimeoutMs ?? config.stepTimeoutMs);
-    const sessionId = buildSessionId(userId);
+  /**
+   * Create a new session for a user
+   */
+  createSession(userId, guildId) {
+    if (this.sessions.has(userId)) {
+      throw new Error(`Session already exists for user ${userId}`);
+    }
 
     const session = {
-      sessionId,
       userId,
-      mode: normalizedMode,
-      steps,
-      stepIndex: 0,
-      currentStep: steps[0],
-      attemptsLeft: maxAttempts,
-      maxAttempts,
-      timeoutMs,
-      stepTimeoutMs,
-      expiresAt: Date.now() + timeoutMs,
-      currentStepStartedAt: Date.now(),
-      currentStepExpiresAt: Date.now() + stepTimeoutMs,
+      guildId,
+      state: 'initializing', // initializing, active, completed, failed
+      currentStep: 'start', // start, challenge, verification, complete
+      attempts: 0,
+      maxAttempts: 3,
       startedAt: Date.now(),
-      status: 'pending',
-      failureReason: null,
-      metadata: {
-        suspiciousFlags: [],
-        stepHistory: [],
+      lastActivityAt: Date.now(),
+      data: {
+        challengeResponse: null,
+        verificationMethod: null,
       },
-      lastInteractionAt: 0,
-      trustAdjustment: 0,
-      ...options.initialData,
+      interactionIds: new Set(), // Track processed interaction IDs to prevent duplicates
     };
 
-    this.cleanupExpired();
-    if (this.sessionsByUser.size >= this.maxSessions) {
-      this.cleanupOldestSessions();
-    }
-
-    if (options.persist !== false) {
-      this.sessionsByUser.set(userId, session);
-      this.sessionsById.set(sessionId, session);
-    }
-
+    this.sessions.set(userId, session);
     return session;
   }
 
-  getSessionByUser(userId) {
-    this.cleanupExpired();
-    return this.sessionsByUser.get(userId) || null;
+  /**
+   * Get session by user ID
+   */
+  getSession(userId) {
+    const session = this.sessions.get(userId);
+    if (session) {
+      session.lastActivityAt = Date.now();
+    }
+    return session;
   }
 
-  getSessionById(sessionId) {
-    this.cleanupExpired();
-    return this.sessionsById.get(sessionId) || null;
+  /**
+   * Update session state
+   */
+  updateSessionState(userId, newState) {
+    const session = this.getSession(userId);
+    if (!session) throw new Error(`Session not found for user ${userId}`);
+    
+    session.state = newState;
+    session.lastActivityAt = Date.now();
+    return session;
   }
 
-  updateSessionByUser(userId, data = {}) {
-    const session = this.getSessionByUser(userId);
-    if (!session) return null;
-    return this.updateSession(session.sessionId, data);
+  /**
+   * Update current step
+   */
+  updateStep(userId, step) {
+    const session = this.getSession(userId);
+    if (!session) throw new Error(`Session not found for user ${userId}`);
+    
+    session.currentStep = step;
+    session.lastActivityAt = Date.now();
+    return session;
   }
 
-  updateSession(sessionId, data = {}) {
-    const session = this.getSessionById(sessionId);
-    if (!session) return null;
-    const updated = {
-      ...session,
-      ...data,
-    };
-    this.sessionsByUser.set(updated.userId, updated);
-    this.sessionsById.set(updated.sessionId, updated);
-    return updated;
+  /**
+   * Increment attempts
+   */
+  incrementAttempts(userId) {
+    const session = this.getSession(userId);
+    if (!session) throw new Error(`Session not found for user ${userId}`);
+    
+    session.attempts++;
+    return session.attempts;
   }
 
-  deleteSession(sessionId) {
-    const session = this.getSessionById(sessionId);
+  /**
+   * Check if interaction was already processed
+   */
+  hasProcessedInteraction(userId, interactionId) {
+    const session = this.getSession(userId);
     if (!session) return false;
-    this.sessionsById.delete(sessionId);
-    this.sessionsByUser.delete(session.userId);
-    return true;
+    return session.interactionIds.has(interactionId);
   }
 
-  cleanupExpired() {
-    const now = Date.now();
-    const bufferMs = 12_000; // guard buffer during active interaction
-    const expiredIds = [];
-    for (const [sessionId, session] of this.sessionsById.entries()) {
-      // do not remove sessions if they were active in last 15 seconds
-      if (session.lastInteractionAt && now - session.lastInteractionAt < 15_000) {
-        continue;
-      }
-
-      if (session.expiresAt <= now - bufferMs || session.currentStepExpiresAt <= now - bufferMs) {
-        expiredIds.push(sessionId);
-      }
-    }
-    for (const sessionId of expiredIds) {
-      this.deleteSession(sessionId);
-    }
+  /**
+   * Mark interaction as processed
+   */
+  markInteractionProcessed(userId, interactionId) {
+    const session = this.getSession(userId);
+    if (!session) throw new Error(`Session not found for user ${userId}`);
+    session.interactionIds.add(interactionId);
   }
 
-  cleanupOldestSessions(target = 100) {
-    const sessions = Array.from(this.sessionsById.values()).sort((a, b) => a.startedAt - b.startedAt);
-    const toRemove = sessions.length - target;
-    if (toRemove <= 0) return;
-    for (let i = 0; i < toRemove; i += 1) {
-      this.deleteSession(sessions[i].sessionId);
-    }
+  /**
+   * Update session data
+   */
+  updateSessionData(userId, key, value) {
+    const session = this.getSession(userId);
+    if (!session) throw new Error(`Session not found for user ${userId}`);
+    
+    session.data[key] = value;
+    session.lastActivityAt = Date.now();
+    return session;
   }
 
-  getActiveSessionCount() {
-    this.cleanupExpired();
-    return this.sessionsById.size;
+  /**
+   * End session
+   */
+  endSession(userId) {
+    return this.sessions.delete(userId);
   }
 
+  /**
+   * Get all active sessions
+   */
   getAllSessions() {
-    this.cleanupExpired();
-    return Array.from(this.sessionsById.entries());
+    return Array.from(this.sessions.values());
   }
 
-  getAllSessionsList() {
-    this.cleanupExpired();
-    return Array.from(this.sessionsById.values());
+  /**
+   * Get count of active sessions
+   */
+  getActiveSessionCount() {
+    return this.sessions.size;
   }
 
-  getSessionsByUser(userId) {
-    this.cleanupExpired();
-    return this.getSessionByUser(userId);
+  /**
+   * Check if user has active session
+   */
+  hasActiveSession(userId) {
+    const session = this.sessions.get(userId);
+    return session && session.state !== 'completed' && session.state !== 'failed';
   }
 
-  createSession(userId, mode = 'NORMAL', options = {}) {
-    const normalizedMode = normalizeMode(mode);
-    const config = DEFAULT_MODE_SETTINGS[normalizedMode];
-    const steps = options.steps || (normalizedMode === 'HARD' ? shuffleArray(config.steps) : [...config.steps]);
-    const timeoutMs = Number(options.timeoutMs ?? config.timeoutMs);
-    const maxAttempts = Number(options.maxAttempts ?? config.maxAttempts);
-    const stepTimeoutMs = Number(options.stepTimeoutMs ?? config.stepTimeoutMs);
-    const sessionId = buildSessionId(userId);
-
-    const session = {
-      sessionId,
-      userId,
-      mode: normalizedMode,
-      steps,
-      stepIndex: 0,
-      currentStep: steps[0],
-      attemptsLeft: maxAttempts,
-      maxAttempts,
-      timeoutMs,
-      stepTimeoutMs,
-      expiresAt: Date.now() + timeoutMs,
-      currentStepStartedAt: Date.now(),
-      currentStepExpiresAt: Date.now() + stepTimeoutMs,
-      startedAt: Date.now(),
-      status: 'pending',
-      failureReason: null,
-      metadata: {
-        suspiciousFlags: [],
-        stepHistory: [],
-      },
-      lastInteractionAt: 0,
-      trustAdjustment: 0,
-      ...options.initialData,
-    };
-
-    this.cleanupExpired();
-    if (this.sessionsByUser.size >= this.maxSessions) {
-      this.cleanupOldestSessions();
-    }
-
-    if (options.persist !== false) {
-      this.sessionsByUser.set(userId, session);
-      this.sessionsById.set(sessionId, session);
-    }
-
-    return session;
-  }
-
-  destroySession(sessionId) {
-    return this.deleteSession(sessionId);
-  }
-
-  isRateLimited(userId, cooldownMs = 1_200) {
-    const session = this.getSessionByUser(userId);
-    if (!session) return false;
+  /**
+   * Cleanup expired sessions (older than 30 minutes)
+   */
+  cleanupExpiredSessions(maxAgeMs = 30 * 60 * 1000) {
     const now = Date.now();
-    return now - (session.lastInteractionAt || 0) < cooldownMs;
-  }
+    let cleaned = 0;
 
-  touchInteraction(userId) {
-    const session = this.getSessionByUser(userId);
-    if (!session) return null;
-    return this.updateSessionByUser(userId, { lastInteractionAt: Date.now() });
+    for (const [userId, session] of this.sessions.entries()) {
+      if (now - session.lastActivityAt > maxAgeMs) {
+        this.sessions.delete(userId);
+        cleaned++;
+      }
+    }
+
+    return cleaned;
   }
 }
+
+// Export singleton instance
+export const sessionManager = new SessionManager();

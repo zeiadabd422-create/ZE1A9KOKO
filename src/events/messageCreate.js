@@ -1,7 +1,5 @@
 import XPManager from '../modules/leveling/XPManager.js';
 import { EmbedBuilder } from 'discord.js';
-import { MAGIC_WORDS } from '../utils/normalizeText.js';
-import { ThreadVerificationSystem } from '../core/ThreadVerificationSystem.js';
 
 const xpManager = new XPManager();
 
@@ -12,28 +10,33 @@ export default {
       // تجاهل رسائل الـ bot
       if (message.author.bot) return;
 
-      // معالجة الرسائل الخاصة (DM) - Thread Verification
+      // معالجة الرسائل الخاصة (DM) - Gateway Verification
       if (!message.guild) {
-        if (MAGIC_WORDS.isStart(message.content)) {
-          try {
-            const result = await ThreadVerificationSystem.startVerificationFromDM(
-              message.author,
-              message.client
-            );
+        // Check if gateway module is available
+        if (message.client.dmHandler) {
+          const handled = await message.client.dmHandler.handleDM(message);
+          if (handled) {
+            // Try to start verification
+            try {
+              // Find guild for verification (use first guild user is in)
+              const mutualGuilds = message.client.guilds.cache.filter(
+                guild => guild.members.cache.has(message.author.id)
+              );
 
-            if (result?.error === 'session_exists') {
-              await message.reply({
-                content: '⚠️ عندك جلسة تحقق مفتوحة بالفعل. يرجى إكمالها أو الانتظار.',
-              }).catch(() => {});
-            } else if (result?.error) {
-              await message.reply({
-                content: '❌ حدث خطأ في إنشاء جلسة التحقق. يرجى المحاولة لاحقا.',
-              }).catch(() => {});
-            } else if (result?.thread) {
-              // Success - message sent in thread
+              if (mutualGuilds.size > 0) {
+                const guild = mutualGuilds.first();
+                const result = await message.client.gateway?.startVerification(
+                  message.author,
+                  guild
+                );
+
+                if (!result?.success && !result?.queued) {
+                  console.error('[messageCreate] Verification start failed:', result);
+                }
+              }
+            } catch (error) {
+              console.error('[messageCreate] Gateway verification error:', error);
             }
-          } catch (error) {
-            console.error('[messageCreate] Thread verification error:', error);
           }
         }
         return;
