@@ -66,7 +66,7 @@ export class DMHandler {
   /**
    * Send help message to user
    */
-  async sendHelpMessage(user) {
+  async sendHelpMessage(user, fallbackChannel = null) {
     try {
       const keywords = this.keywordEngine.formatKeywordsForDisplay();
 
@@ -95,8 +95,14 @@ export class DMHandler {
           },
         ],
       });
+
+      return { success: true };
     } catch (error) {
       console.error(`[DMHandler] Failed to send help message:`, error);
+      if (fallbackChannel && fallbackChannel.isTextBased?.()) {
+        await fallbackChannel.send(`${user} افتح الخاص أو اضغط على الزر هنا للبدء`).catch(() => {});
+      }
+      return { success: false, error: error.message };
     }
   }
 
@@ -129,7 +135,7 @@ export class DMHandler {
   /**
    * Send welcome DM to new user
    */
-  async sendWelcomeDM(user, guildName, keywords) {
+  async sendWelcomeDM(user, guildName, keywords, fallbackChannel = null) {
     try {
       const keywordList = keywords.join(' / ');
 
@@ -163,6 +169,9 @@ export class DMHandler {
       return { success: true };
     } catch (error) {
       console.error(`[DMHandler] Failed to send welcome DM:`, error);
+      if (fallbackChannel && fallbackChannel.isTextBased?.()) {
+        await fallbackChannel.send(`${user} افتح الخاص أو اضغط على الزر هنا للبدء`).catch(() => {});
+      }
       return { success: false, error: error.message };
     }
   }
@@ -328,5 +337,50 @@ export class DMHandler {
    */
   clearAllThrottles() {
     this.dmThrottling.clear();
+  }
+
+  /**
+   * Send member welcome to new user
+   */
+  async sendMemberWelcome(user, guild) {
+    try {
+      const keywords = this.keywordEngine.getValidKeywords();
+      const keywordList = keywords.join(' / ');
+
+      await user.send({
+        embeds: [
+          {
+            color: 0x9b59b6,
+            title: `🎉 Welcome to ${guild.name}!`,
+            description: 'Thank you for joining our server! To access the full server, you need to complete a quick verification.',
+            fields: [
+              {
+                name: '✅ How to Verify',
+                value: `Reply to this message with one of these keywords:\n\`${keywordList}\``,
+                inline: false,
+              },
+              {
+                name: '⏱️ Time',
+                value: 'Takes about 2-3 minutes',
+                inline: true,
+              },
+              {
+                name: '📝 What We Check',
+                value: 'Basic verification only',
+                inline: true,
+              },
+            ],
+            footer: {
+              text: 'Automated verification system',
+            },
+          },
+        ],
+      });
+
+      return { success: true };
+    } catch (error) {
+      console.error(`[DMHandler] Failed to send member welcome:`, error);
+      return { success: false, error: error.message };
+    }
   }
 }

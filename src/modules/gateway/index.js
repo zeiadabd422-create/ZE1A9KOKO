@@ -31,6 +31,7 @@ export default async function initializeGateway(client) {
 
   client.container = client.container || {};
   client.container.gateway = controller;
+  console.log("✅ REGISTERED:", Object.keys(client.container));
 
   // Setup cleanup job for sessions
   setInterval(() => {

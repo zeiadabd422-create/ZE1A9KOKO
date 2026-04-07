@@ -36,3 +36,8 @@ export default async function loadModules(client) {
                                                     client[folder] = loaded;
                                           }
                                 }
+                      } catch (error) {
+                                console.error(`[MODULE-LOADER] Failed to load module "${folder}":`, error);
+                      }
+              }
+}

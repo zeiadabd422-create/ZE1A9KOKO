@@ -2,6 +2,8 @@
  * SessionManager - Single source of truth for user verification sessions
  * Map-based storage with guaranteed no duplicates
  */
+import { gatewayLogger } from '../utils/GatewayLogger.js';
+
 export class SessionManager {
   constructor() {
     this.sessions = new Map(); // userId -> Session
@@ -12,29 +14,36 @@ export class SessionManager {
    * Create a new session for a user
    */
   createSession(userId, guildId) {
-    if (this.sessions.has(userId)) {
-      throw new Error(`Session already exists for user ${userId}`);
-    }
+      if (this.sessions.has(userId)) {
+        gatewayLogger.log('WARN', null, 'Session duplicate rejected', { userId });
+        return null;
+      }
 
-    const session = {
-      userId,
-      guildId,
-      state: 'initializing', // initializing, active, completed, failed
-      currentStep: 'start', // start, challenge, verification, complete
-      attempts: 0,
-      maxAttempts: 3,
-      startedAt: Date.now(),
-      lastActivityAt: Date.now(),
-      data: {
-        challengeResponse: null,
-        verificationMethod: null,
-      },
-      interactionIds: new Set(), // Track processed interaction IDs to prevent duplicates
-    };
+        const sessionId = `${userId}-${Date.now()}`;
+        const session = {
+                id: sessionId,
+                userId,
+                    guildId,
+                        state: 'initializing',
+                            currentStep: 'start',
+                                attempts: 0,
+                                    maxAttempts: 3,
+                                        startedAt: Date.now(),
+                                            lastActivityAt: Date.now(),
+                                                data: {},
+                                                    interactionIds: new Set(),
+                                                        timeout: setTimeout(() => {
+                                                                  if (this.onSessionExpired) {
+                                                                    gatewayLogger.sessionExpired(sessionId, userId);
+                                                                    this.onSessionExpired(userId, guildId);
+                                                                  }
+                                                        }, 5 * 60 * 1000)
+        };
 
-    this.sessions.set(userId, session);
-    return session;
-  }
+          this.sessions.set(userId, session);
+          gatewayLogger.sessionCreated(userId, guildId, sessionId);
+            return session;
+}
 
   /**
    * Get session by user ID
@@ -116,7 +125,33 @@ export class SessionManager {
    * End session
    */
   endSession(userId) {
-    return this.sessions.delete(userId);
+    const s = this.sessions.get(userId);
+    if (!s) return false;
+    
+    const sessionId = s.id;
+    if (s?.interactionIds) {
+      s.interactionIds.clear();
+    }
+    if (s && s.timeout) {
+      clearTimeout(s.timeout);
+    }
+    
+    const deleted = this.sessions.delete(userId);
+    if (deleted) {
+      gatewayLogger.sessionEnded(sessionId, userId, 'cleanup');
+    }
+    return deleted;
+  }
+
+  /**
+   * Cancel session
+   */
+  cancelSession(userId) {
+    const session = this.sessions.get(userId);
+    if (!session) return;
+
+    clearTimeout(session.timeout);
+    this.sessions.delete(userId);
   }
 
   /**

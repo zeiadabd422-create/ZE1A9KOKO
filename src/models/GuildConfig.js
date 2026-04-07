@@ -18,7 +18,8 @@ const GuildConfigSchema = new mongoose.Schema({
     autoKickDelay: { type: Number, default: 300000 }, // 5 minutes
     riskThreshold: { type: Number, default: 50 }, // Risk score threshold
     welcomeMessage: { type: String, default: 'Welcome to the server!' },
-    verifiedRoleId: { type: String, default: null }
+    verifiedRoleId: { type: String, default: null },
+    unverifiedRoleId: { type: String, default: null }
   },
 
   welcome: {

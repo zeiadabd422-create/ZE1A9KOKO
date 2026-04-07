@@ -1,6 +1,8 @@
 /**
  * QueueManager - Manages waiting users and concurrent session limits
  */
+import { gatewayLogger } from '../utils/GatewayLogger.js';
+
 export class QueueManager {
   constructor(maxConcurrent = 20) {
     this.waitingQueue = []; // userId[]
@@ -18,7 +20,9 @@ export class QueueManager {
     }
 
     this.waitingQueue.push(userId);
-    return this.getQueuePosition(userId);
+    const position = this.getQueuePosition(userId);
+    gatewayLogger.queueEnqueue(userId, position);
+    return position;
   }
 
   /**
@@ -32,6 +36,10 @@ export class QueueManager {
     }
 
     this.activeSessions.add(userId);
+    gatewayLogger.log('QUEUE:START', null, `User started session (${this.activeSessions.size}/${this.maxConcurrent} active)`, {
+      userId,
+      activeSessions: this.activeSessions.size
+    });
     return true;
   }
 
@@ -39,29 +47,29 @@ export class QueueManager {
    * Finish session and notify next user
    */
   async finishSession(userId) {
-    // Validate user is in active sessions
-    if (!this.activeSessions.has(userId)) {
-      console.warn(`[QueueManager] Finish session called for non-active user: ${userId}`);
-      return;
-    }
+      gatewayLogger.log('QUEUE:FINISH', null, `User session finished`, { userId });
+      this.activeSessions.delete(userId);
+      gatewayLogger.log('QUEUE:STATE', null, `Active sessions: ${this.activeSessions.size}/${this.maxConcurrent}`, {
+        activeSessions: this.activeSessions.size,
+        waiting: this.waitingQueue.length
+      });
 
-    this.activeSessions.delete(userId);
+        if (this.waitingQueue.length > 0 && this.activeSessions.size < this.maxConcurrent) {
+                const nextId = this.waitingQueue.shift();
+                gatewayLogger.queueNotify(nextId);
+                    const cb = this.notificationCallbacks.get(nextId);
+                        this.notificationCallbacks.delete(nextId);
 
-    // Notify next user if available
-    if (this.waitingQueue.length > 0 && this.activeSessions.size < this.maxConcurrent) {
-      const nextUserId = this.waitingQueue[0];
-      const callback = this.notificationCallbacks.get(nextUserId);
-      
-      if (callback) {
-        try {
-          await callback();
-          this.dequeue(nextUserId);
-        } catch (error) {
-          console.error(`Failed to notify user ${nextUserId}:`, error);
+                            if (cb) {
+                                      try {
+                                                await cb();
+                                                console.log('[GatewayTest] Callback executed for ' + nextId);
+                                      } catch (e) {
+                                                console.error('[Queue] Notification failed:', e);
+                                      }
+                            }
         }
-      }
-    }
-  }
+}
 
   /**
    * Remove user from queue

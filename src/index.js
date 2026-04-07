@@ -56,6 +56,15 @@ async function bootstrap() {
   try {
     console.log('--- [GUARDIAN V3 BOOT SEQUENCE] ---');
 
+    // 🧠 FIND REAL ENV SOURCE (CRITICAL BUG)
+    console.log("\n=== ENV CHECK ===");
+    console.log("CWD =", process.cwd());
+    console.log("\n=== ALL ENV MONGO KEYS ===");
+    console.log("MONGO_URI =", process.env.MONGO_URI);
+    console.log("MONGODB_URI =", process.env.MONGODB_URI);
+    console.log("DATABASE_URL =", process.env.DATABASE_URL);
+    console.log("==================\n");
+
     // أ. الربط مع قاعدة البيانات
     await connectDatabase();
     console.log('[1/4] DATABASE: Online.');

@@ -1,38 +1,59 @@
 import { handleButton as handleShopButton, handleSelectMenu as handleShopSelect } from './ShopInteractionHandler.js';
+import { gatewayLogger } from '../utils/GatewayLogger.js';
 
 export async function handleInteraction(interaction) {
-  const client = interaction.client;
+  console.log("📦 DISPATCHER RECEIVED", interaction.customId);
+  
+  try {
+    // 🔴 TRACE POINT 2: Dispatcher received interaction
+    console.log('[TRACE-2] ✅ InteractionDispatcher RECEIVED');
+    console.log('[TRACE-2] - customId:', interaction.customId);
+    console.log('[TRACE-2] - isButton:', interaction.isButton?.());
+    
+    const client = interaction.client;
+    const gateway = client?.container?.gateway;  // ✅ صحح إلى "gateway"
 
-  // 1. Gateway أولاً
-  const gateway = client?.container?.gateway;
-  if (gateway) {
-    const handled = await gateway.handleInteraction(interaction);
-    if (handled) return;
-  }
+    console.log('[TRACE-2] - gateway exists:', !!gateway);
 
-  // 2. Commands
-  if (interaction.isChatInputCommand()) {
-    const command = client.commands.get(interaction.commandName);
-    if (command) {
-      await command.execute(interaction);
-      return;
+    try {
+      if (gateway) {
+        console.log('[TRACE-2] 🎯 Calling gateway.handleInteraction...');
+        gatewayLogger.log('DEBUG', null, 'Dispatcher routing to gateway', { customId: interaction.customId });
+        const handled = await gateway.handleInteraction(interaction);
+        console.log('[TRACE-2] - gateway returned:', handled);
+        if (handled === true) {
+          console.log('[TRACE-2] ✅ GATEWAY HANDLED - returning');
+          return;
+        }
+      }
+    } catch (err) {
+      console.log('[TRACE-2] ❌ Gateway handler error:', err.message);
+      gatewayLogger.error(null, err, { dispatcher: 'gateway_handler', customId: interaction.customId });
+      // Continue to other handlers
+    }
+
+    console.log('[TRACE-2] - Continuing to other handlers...');
+
+    if (interaction.isChatInputCommand()) {
+      const cmd = client.commands.get(interaction.commandName);
+      if (cmd) return await cmd.execute(interaction);
+    }
+
+    if (interaction.isButton()) {
+      try {
+        if (await handleShopButton(interaction)) return;
+      } catch (err) {
+        gatewayLogger.error(null, err, { dispatcher: 'shop_button' });
+      }
+    }
+
+    gatewayLogger.log('DEBUG', null, 'Unhandled interaction', { customId: interaction.customId, type: interaction.type });
+  } catch (error) {
+    gatewayLogger.error(null, error, { dispatcher: 'main_handler' });
+    if (interaction.isRepliable()) {
+      await interaction.reply({ content: '⚠️ Error processing interaction', ephemeral: true }).catch(() => {});
     }
   }
-
-  // 3. باقي الأنظمة هنا
-  if (interaction.isAutocomplete()) {
-    return handleAutocomplete(interaction);
-  }
-
-  if (interaction.isButton()) {
-    return handleButtonInteraction(interaction);
-  }
-
-  if (interaction.isStringSelectMenu()) {
-    return handleSelectMenuInteraction(interaction);
-  }
-
-  return null;
 }
 
 async function handleAutocomplete(interaction) {
@@ -46,31 +67,6 @@ async function handleAutocomplete(interaction) {
   }
 }
 
-async function handleCommandInteraction(interaction) {
-  const command = interaction.client?.commands?.get(interaction.commandName);
-  if (!command || typeof command.execute !== 'function') {
-    if (interaction.isRepliable() && !interaction.replied && !interaction.deferred) {
-      await interaction.reply({
-        content: '❌ Command not found or is not available.',
-        ephemeral: true,
-      });
-    }
-    return;
-  }
-
-  try {
-    await command.execute(interaction);
-  } catch (error) {
-    console.error('[InteractionDispatcher] command handler failed:', error);
-    if (interaction.isRepliable() && !interaction.replied) {
-      await interaction.reply({
-        content: 'An error occurred while processing your command.',
-        ephemeral: true,
-      });
-    }
-  }
-}
-
 async function handleButtonInteraction(interaction) {
   try {
     const shopHandled = await handleShopButton(interaction);
@@ -78,9 +74,7 @@ async function handleButtonInteraction(interaction) {
       return true;
     }
 
-    if (interaction.isRepliable()) {
-      await interaction.reply({ content: 'Button action not handled.', ephemeral: true }).catch(() => {});
-    }
+    console.warn('[Dispatcher] Unhandled button:', interaction.customId);
     return false;
   } catch (error) {
     console.error('[InteractionDispatcher] handleButtonInteraction error:', error);
@@ -98,9 +92,7 @@ async function handleSelectMenuInteraction(interaction) {
       return true;
     }
 
-    if (interaction.isRepliable()) {
-      await interaction.reply({ content: 'Select menu action not handled.', ephemeral: true }).catch(() => {});
-    }
+    console.warn('[Dispatcher] Unhandled select menu:', interaction.customId);
     return false;
   } catch (error) {
     console.error('[InteractionDispatcher] handleSelectMenuInteraction error:', error);
